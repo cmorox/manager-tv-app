@@ -29,6 +29,8 @@ import {
   Settings,
   Palette,
   Download,
+  Bell,
+  Copy, // Nuevo icono para copiar mensaje
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -309,7 +311,7 @@ export default function App() {
 
   // Estado para Plataformas Dinámicas
   const [userPlatforms, setUserPlatforms] = useState(DEFAULT_PLATFORMS);
-  const [showSettings, setShowSettings] = useState(false); // Modal Configuración
+  const [showSettings, setShowSettings] = useState(false);
   const [newPlatformName, setNewPlatformName] = useState("");
   const [newPlatformColor, setNewPlatformColor] = useState(
     AVAILABLE_COLORS[0].class
@@ -326,6 +328,9 @@ export default function App() {
     baseDateUsed: null,
     isReactivation: false,
   });
+
+  // Nuevo estado para Notificaciones
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortOption, setSortOption] = useState("expiryDate");
@@ -370,7 +375,6 @@ export default function App() {
         if (docSnap.exists() && docSnap.data().platforms) {
           setUserPlatforms(docSnap.data().platforms);
         } else {
-          // Si no tiene config, usa las default
           setUserPlatforms(DEFAULT_PLATFORMS);
         }
       } catch (error) {
@@ -380,7 +384,6 @@ export default function App() {
     fetchSettings();
   }, [user]);
 
-  // Guardar Plataformas en DB
   const savePlatformsToDB = async (updatedPlatforms) => {
     if (!user) return;
     try {
@@ -403,7 +406,6 @@ export default function App() {
       name: newPlatformName.toUpperCase(),
       color: newPlatformColor,
     };
-    // Evitar duplicados
     if (userPlatforms.some((p) => p.name === newPlat.name)) {
       alert("Esa plataforma ya existe.");
       return;
@@ -426,7 +428,7 @@ export default function App() {
     }
   };
 
-  // Carga de Clientes (PRIVADA POR USUARIO)
+  // Carga de Clientes
   useEffect(() => {
     if (!user) {
       setClients([]);
@@ -623,8 +625,12 @@ export default function App() {
     }
   };
 
-  // --- FUNCIÓN WHATSAPP INTELIGENTE ---
-  const openWhatsApp = (client) => {
+  const handleQuickRenew = async (client) => {
+    handleOpenRenewalModal(client);
+  };
+
+  // --- FUNCIÓN WHATSAPP OPTIMIZADA (Móvil/PC) ---
+  const openWhatsApp = (client, type = "default") => {
     if (!client || !client.contact) return;
 
     const cleanPhone = client.contact.replace(/\D/g, "");
@@ -633,28 +639,49 @@ export default function App() {
     const days = getDaysRemaining(client.expiryDate);
     let message = "";
 
-    // Plantillas Inteligentes
-    if (days < 0) {
-      // Vencido
-      message = `Hola ${client.name}, tu servicio de ${
+    if (type === "reminder-tomorrow") {
+      message = `Hola ${client.name}, recordatorio amable: tu servicio de ${
         client.platform
-      } venció el ${formatDate(client.expiryDate)}. ¿Te gustaría reactivarlo?`;
-    } else if (days <= 5) {
-      // Por vencer
-      message = `Hola ${client.name}, te recuerdo que tu servicio de ${
-        client.platform
-      } está por vencer el ${formatDate(
+      } vence MAÑANA (${formatDate(
         client.expiryDate
-      )} (en ${days} días). ¿Deseas renovar?`;
+      )}). ¿Deseas renovar para no perder la señal? 📺`;
+    } else if (type === "recovery-15") {
+      message = `Hola ${client.name}, te extrañamos. Han pasado 15 días desde que venció tu cuenta de ${client.platform}. ¿Te gustaría reactivar el servicio hoy? 👋`;
     } else {
-      // Activo (Enviar credenciales o saludo)
-      message = `Hola ${client.name}, aquí tienes los datos de tu cuenta ${client.platform}:\nUsuario: ${client.username}`;
+      // Lógica por defecto (Botón tabla)
+      if (days < 0) {
+        message = `Hola ${client.name}, tu servicio de ${
+          client.platform
+        } venció el ${formatDate(
+          client.expiryDate
+        )}. ¿Te gustaría reactivarlo?`;
+      } else if (days <= 5) {
+        message = `Hola ${client.name}, recordatorio: tu cuenta de ${
+          client.platform
+        } vence pronto, el ${formatDate(
+          client.expiryDate
+        )} (en ${days} días). ¿Deseas renovar?`;
+      } else {
+        message = `Hola ${client.name}, aquí tienes los datos de tu cuenta ${client.platform}:\nUsuario: ${client.username}`;
+      }
     }
 
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-      message
-    )}`;
-    window.open(url, "_blank");
+    const encodedMessage = encodeURIComponent(message);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // Móvil: Deep Link a la API (dispara la app nativa)
+      window.open(
+        `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`,
+        "_blank"
+      );
+    } else {
+      // Escritorio: WhatsApp Web (evita la landing page de "Download")
+      window.open(
+        `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`,
+        "_blank"
+      );
+    }
   };
 
   // --- LÓGICA DE EXPORTACIÓN CSV ---
@@ -664,8 +691,6 @@ export default function App() {
       return;
     }
 
-    // Encabezados exactos para re-importación
-    // STATUS, PLATAFORMA, ID, USUARIO, NOMBRE, EXPIRACION, INICIO, CONTACTO, CONEXIONES, CONTRATACIONES
     const headers = [
       "STATUS",
       "PLATAFORMA",
@@ -679,13 +704,11 @@ export default function App() {
       "CONTRATACIONES",
     ];
 
-    // Construcción de filas
     const rows = clients.map((client) => {
       const days = getDaysRemaining(client.expiryDate);
       let status = "ON";
       if (days < 0) status = "OFF";
 
-      // Formatear para CSV (escapar comas si es necesario)
       return [
         status,
         client.platform,
@@ -699,14 +722,13 @@ export default function App() {
         client.renewals,
       ]
         .map((field) => `"${String(field || "").replace(/"/g, '""')}"`)
-        .join(","); // Escapar campos
+        .join(",");
     });
 
     const csvContent = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
 
-    // Crear enlace temporal
     const link = document.createElement("a");
     link.setAttribute("href", url);
     link.setAttribute(
@@ -806,7 +828,6 @@ export default function App() {
       setEditingClient(null);
       const today = new Date();
       const nextMonth = new Date(new Date().setMonth(today.getMonth() + 1));
-      // Usar la primera plataforma disponible por defecto
       const defaultPlatform =
         userPlatforms.length > 0 ? userPlatforms[0].id : "OTRO";
       setFormData({
@@ -836,6 +857,15 @@ export default function App() {
     setShowModal(false);
     setEditingClient(null);
   };
+
+  // --- CÁLCULO DE NOTIFICACIONES PENDIENTES ---
+  const pendingNotifications = useMemo(() => {
+    if (!clients.length) return [];
+    return clients.filter((client) => {
+      const days = getDaysRemaining(client.expiryDate);
+      return days === 1 || days === -15;
+    });
+  }, [clients]);
 
   const filteredClients = useMemo(() => {
     let result = clients.filter((client) => {
@@ -940,14 +970,97 @@ export default function App() {
             </div>
 
             {/* Botones */}
-            <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-              <button
-                onClick={handleDeleteAll}
-                className="flex-1 sm:flex-none bg-rose-950/30 hover:bg-rose-900/40 text-rose-400 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-rose-900/20 whitespace-nowrap"
-                title="Eliminar TODOS los clientes"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+            <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 items-center">
+              {/* BOTÓN NOTIFICACIONES */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className={`p-2 rounded-lg transition-all relative ${
+                    showNotifications
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                  }`}
+                >
+                  <Bell className="w-5 h-5" />
+                  {pendingNotifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-lg animate-bounce">
+                      {pendingNotifications.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* DROPDOWN NOTIFICACIONES */}
+                {showNotifications && (
+                  <div className="absolute top-full right-0 mt-2 w-80 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-3 border-b border-slate-700 bg-slate-900/50">
+                      <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                        <Bell className="w-4 h-4 text-blue-400" /> Tareas
+                        Pendientes
+                      </h4>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {pendingNotifications.length === 0 ? (
+                        <div className="p-6 text-center text-slate-500 text-sm">
+                          <CheckCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          ¡Todo al día! No hay alertas hoy.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-700">
+                          {pendingNotifications.map((client) => {
+                            const days = getDaysRemaining(client.expiryDate);
+                            const isUrgent = days === 1; // Vence mañana
+                            return (
+                              <div
+                                key={client.id}
+                                className="p-3 hover:bg-slate-700/30 transition-colors"
+                              >
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <p className="text-white font-medium text-sm">
+                                      {client.name}
+                                    </p>
+                                    <p className="text-slate-400 text-xs">
+                                      {client.platform} • {client.contact}
+                                    </p>
+                                  </div>
+                                  <span
+                                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                                      isUrgent
+                                        ? "bg-yellow-500/20 text-yellow-400"
+                                        : "bg-blue-500/20 text-blue-400"
+                                    }`}
+                                  >
+                                    {isUrgent ? "Vence Mañana" : "Recuperación"}
+                                  </span>
+                                </div>
+                                {client.contact && (
+                                  <button
+                                    onClick={() =>
+                                      openWhatsApp(
+                                        client,
+                                        isUrgent
+                                          ? "reminder-tomorrow"
+                                          : "recovery-15"
+                                      )
+                                    }
+                                    className="w-full py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-600/30 rounded text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+                                  >
+                                    <MessageCircle className="w-3 h-3" /> Enviar
+                                    Recordatorio
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="w-px h-6 bg-slate-700 mx-1 hidden sm:block"></div>
+
               <button
                 onClick={triggerFileUpload}
                 className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-slate-600/50 shadow-sm whitespace-nowrap"
@@ -956,7 +1069,6 @@ export default function App() {
                 <span className="hidden sm:inline">Importar</span>
               </button>
 
-              {/* Nuevo Botón Exportar */}
               <button
                 onClick={handleExportCSV}
                 className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-slate-600/50 shadow-sm whitespace-nowrap"
@@ -966,7 +1078,6 @@ export default function App() {
                 <span className="hidden sm:inline">Exportar</span>
               </button>
 
-              {/* Botón Configurar Plataformas */}
               <button
                 onClick={() => setShowSettings(true)}
                 className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-slate-600/50 shadow-sm whitespace-nowrap"
