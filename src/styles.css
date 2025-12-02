@@ -1,0 +1,12 @@
+/* Como estamos usando Tailwind CSS (vía CDN en index.html),
+  no necesitamos estilos complejos aquí.
+  
+  Dejamos este archivo limpio para evitar conflictos con el diseño de App.js.
+*/
+
+body {
+  margin: 0;
+  padding: 0;
+  /* Un fondo base por seguridad */
+  background-color: #f8fafc;
+}
