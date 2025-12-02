@@ -23,10 +23,18 @@ import {
   Hash,
   Activity,
   ArrowUpDown,
-  Clock, // Nuevo icono
+  Lock,
+  Mail,
+  User,
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+} from "firebase/auth";
 import {
   getFirestore,
   collection,
@@ -143,19 +151,144 @@ const parseCSVDate = (dateStr) => {
   return new Date().toISOString().split("T")[0];
 };
 
+// --- COMPONENTE LOGIN ---
+function LoginScreen() {
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      if (isRegistering) {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err) {
+      console.error(err);
+      if (
+        err.code === "auth/invalid-credential" ||
+        err.code === "auth/user-not-found" ||
+        err.code === "auth/wrong-password"
+      ) {
+        setError("Correo o contraseña incorrectos.");
+      } else if (err.code === "auth/email-already-in-use") {
+        setError("Este correo ya está registrado.");
+      } else if (err.code === "auth/weak-password") {
+        setError("La contraseña debe tener al menos 6 caracteres.");
+      } else {
+        setError("Error: " + err.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans">
+      <div className="bg-slate-900 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-800">
+        <div className="flex flex-col items-center mb-8">
+          <div className="bg-blue-600 p-3 rounded-xl shadow-lg shadow-blue-900/30 mb-4 animate-pulse">
+            <Monitor className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">
+            Proview TV
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">Plataforma de Gestión</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+              Correo Electrónico
+            </label>
+            <div className="relative group">
+              <Mail className="absolute left-3 top-3 w-5 h-5 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
+              <input
+                type="email"
+                required
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-10 pr-4 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder-slate-600"
+                placeholder="usuario@ejemplo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+              Contraseña
+            </label>
+            <div className="relative group">
+              <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
+              <input
+                type="password"
+                required
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-10 pr-4 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder-slate-600"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm p-3 rounded-lg flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading
+              ? "Procesando..."
+              : isRegistering
+              ? "Registrarse"
+              : "Iniciar Sesión"}
+          </button>
+        </form>
+
+        <div className="mt-8 text-center pt-6 border-t border-slate-800">
+          <p className="text-slate-500 text-sm mb-2">
+            {isRegistering ? "¿Ya tienes una cuenta?" : "¿Eres nuevo aquí?"}
+          </p>
+          <button
+            onClick={() => {
+              setIsRegistering(!isRegistering);
+              setError("");
+            }}
+            className="text-blue-400 hover:text-blue-300 font-medium text-sm transition-colors hover:underline"
+          >
+            {isRegistering ? "Inicia Sesión" : "Crear Cuenta Gratis"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Componente Principal ---
 export default function App() {
   const [user, setUser] = useState(null);
+  const [authChecking, setAuthChecking] = useState(true);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
 
-  // Modales
+  // Estados de UI
+  const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [viewDetailsClient, setViewDetailsClient] = useState(null);
   const [editingClient, setEditingClient] = useState(null);
-
-  // Nuevo Estado para Modal de Renovación
   const [renewingClient, setRenewingClient] = useState(null);
   const [renewalData, setRenewalData] = useState({
     newExpiryDate: "",
@@ -179,24 +312,29 @@ export default function App() {
     renewals: 1,
   });
 
+  // Listener de Autenticación
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.error("Error de autenticación:", error);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthChecking(false);
+    });
     return () => unsubscribe();
   }, []);
 
+  // Carga de Clientes (PRIVADA POR USUARIO)
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setClients([]);
+      return;
+    }
+
+    setLoading(true);
+    // CAMBIO IMPORTANTE: Ruta privada 'users/{uid}/clients'
+    // Ahora cada usuario ve SOLO sus propios clientes
     const q = query(
-      collection(db, "artifacts", appId, "public", "data", "clients")
+      collection(db, "artifacts", appId, "users", user.uid, "clients")
     );
+
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
@@ -215,6 +353,14 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error cerrando sesión:", error);
+    }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!user) return;
@@ -223,8 +369,8 @@ export default function App() {
         db,
         "artifacts",
         appId,
-        "public",
-        "data",
+        "users",
+        user.uid,
         "clients"
       );
       if (editingClient) {
@@ -247,7 +393,7 @@ export default function App() {
       return;
     try {
       await deleteDoc(
-        doc(db, "artifacts", appId, "public", "data", "clients", id)
+        doc(db, "artifacts", appId, "users", user.uid, "clients", id)
       );
       if (viewDetailsClient && viewDetailsClient.id === id) {
         closeDetailsModal();
@@ -276,8 +422,8 @@ export default function App() {
         db,
         "artifacts",
         appId,
-        "public",
-        "data",
+        "users",
+        user.uid,
         "clients"
       );
       const snapshot = await getDocs(collectionRef);
@@ -295,7 +441,6 @@ export default function App() {
     }
   };
 
-  // --- NUEVA LÓGICA DE RENOVACIÓN (Abre Modal) ---
   const handleOpenRenewalModal = (client) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -310,16 +455,13 @@ export default function App() {
     let baseDate;
     let isReactivation = false;
 
-    // Si ya venció, sugerimos renovar desde HOY (reactivación)
     if (currentExpiry < today) {
       baseDate = today;
       isReactivation = true;
     } else {
-      // Si no ha vencido, extendemos desde su fecha actual
       baseDate = currentExpiry;
     }
 
-    // Por defecto +1 mes
     const defaultNewExpiry = new Date(baseDate);
     defaultNewExpiry.setMonth(defaultNewExpiry.getMonth() + 1);
 
@@ -331,7 +473,6 @@ export default function App() {
     });
   };
 
-  // Función para aplicar presets (+1, +3, +6 meses)
   const applyRenewalPreset = (months) => {
     if (!renewalData.baseDateUsed) return;
     const newDate = new Date(renewalData.baseDateUsed);
@@ -342,7 +483,6 @@ export default function App() {
     }));
   };
 
-  // Guardar la renovación final
   const confirmRenewal = async () => {
     if (!renewingClient || !user) return;
 
@@ -352,8 +492,6 @@ export default function App() {
         renewals: (parseInt(renewingClient.renewals) || 0) + 1,
       };
 
-      // Si fue reactivación (estaba vencido), actualizamos también la fecha de inicio
-      // para reflejar que es un "nuevo" ciclo desde hoy, si así se desea.
       if (renewalData.isReactivation) {
         updates.startDate = renewalData.baseDateUsed
           .toISOString()
@@ -365,21 +503,26 @@ export default function App() {
           db,
           "artifacts",
           appId,
-          "public",
-          "data",
+          "users",
+          user.uid,
           "clients",
           renewingClient.id
         ),
         updates
       );
-      setRenewingClient(null); // Cerrar modal
+      setRenewingClient(null);
       if (viewDetailsClient && viewDetailsClient.id === renewingClient.id) {
-        closeDetailsModal(); // Cerrar detalles si estaba abierto
+        closeDetailsModal();
       }
     } catch (error) {
       console.error("Error renovando:", error);
       alert("Error al guardar la renovación.");
     }
+  };
+
+  // Quick renew fallback
+  const handleQuickRenew = async (client) => {
+    handleOpenRenewalModal(client);
   };
 
   const handleFileUpload = (e) => {
@@ -417,14 +560,17 @@ export default function App() {
         if (confirm(`¿Importar ${newClients.length} clientes?`)) {
           try {
             const batch = writeBatch(db);
+            // IMPORTANTE: Ahora subimos a la ruta privada
             const collectionRef = collection(
               db,
               "artifacts",
               appId,
-              "public",
-              "data",
+              "users",
+              user.uid,
               "clients"
             );
+
+            // Batch limit 500
             const batchClients = newClients.slice(0, 490);
             batchClients.forEach((client) => {
               const newDocRef = doc(collectionRef);
@@ -546,14 +692,22 @@ export default function App() {
     window.open(`https://wa.me/${cleanPhone}`, "_blank");
   };
 
-  // Cargando suavizado
-  if (loading)
+  // --- RENDERIZADO CONDICIONAL ---
+
+  if (authChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-blue-400 font-medium">
-        Cargando Sistema...
+        Cargando...
       </div>
     );
+  }
 
+  // SI NO HAY USUARIO, MUESTRA LOGIN
+  if (!user) {
+    return <LoginScreen />;
+  }
+
+  // --- APP PRINCIPAL (SOLO SI HAY USUARIO) ---
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-gray-100 pb-20 transition-colors duration-300">
       <input
@@ -577,14 +731,16 @@ export default function App() {
                   Proview TV
                 </h1>
                 <span className="bg-blue-900/40 text-blue-300 text-[10px] px-1.5 py-0.5 rounded border border-blue-700/30 flex items-center gap-1">
-                  <Globe className="w-3 h-3" /> Cloud
+                  <Lock className="w-3 h-3" /> Privado
                 </span>
               </div>
-              <p className="text-xs text-slate-400">Panel de Administración</p>
+              <p className="text-xs text-slate-400 truncate w-32 md:w-auto flex items-center gap-1">
+                <User className="w-3 h-3" /> {user.email}
+              </p>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            {/* Buscador Simple */}
+            {/* Buscador */}
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
               <input
@@ -597,27 +753,34 @@ export default function App() {
             </div>
 
             {/* Botones */}
-            <div className="flex gap-2 w-full sm:w-auto">
+            <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
               <button
                 onClick={handleDeleteAll}
-                className="flex-1 sm:flex-none bg-rose-950/30 hover:bg-rose-900/40 text-rose-400 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-rose-900/20"
+                className="flex-1 sm:flex-none bg-rose-950/30 hover:bg-rose-900/40 text-rose-400 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-rose-900/20 whitespace-nowrap"
                 title="Eliminar TODOS los clientes"
               >
-                <Trash2 className="w-4 h-4" />{" "}
-                <span className="hidden sm:inline">Borrar</span>
+                <Trash2 className="w-4 h-4" />
               </button>
               <button
                 onClick={triggerFileUpload}
-                className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-slate-600/50 shadow-sm"
+                className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-slate-600/50 shadow-sm whitespace-nowrap"
               >
                 <FileSpreadsheet className="w-4 h-4" />{" "}
                 <span className="hidden sm:inline">Importar</span>
               </button>
               <button
                 onClick={() => openModal()}
-                className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all shadow-lg shadow-blue-900/20 active:scale-95 text-sm"
+                className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all shadow-lg shadow-blue-900/20 active:scale-95 text-sm whitespace-nowrap"
               >
-                <Plus className="w-4 h-4" /> <span>Nuevo</span>
+                <Plus className="w-4 h-4" />{" "}
+                <span className="hidden sm:inline">Nuevo</span>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex-1 sm:flex-none bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-lg border border-slate-700 transition-colors"
+                title="Cerrar Sesión"
+              >
+                <LogOut className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -669,7 +832,6 @@ export default function App() {
               <div className="flex items-center gap-2 text-slate-300 font-semibold text-sm">
                 <Filter className="w-4 h-4" /> <span>Ordenar por:</span>
               </div>
-              {/* Selector de Ordenamiento Integrado */}
               <div className="relative">
                 <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                   <ArrowUpDown className="w-3 h-3" />
@@ -686,7 +848,7 @@ export default function App() {
               </div>
             </div>
             <span className="text-xs font-medium text-slate-400 bg-slate-900 px-2 py-1 rounded-md border border-slate-700">
-              {filteredClients.length} registros
+              {loading ? "Cargando..." : `${filteredClients.length} registros`}
             </span>
           </div>
 
@@ -718,7 +880,6 @@ export default function App() {
                       key={client.id}
                       className="hover:bg-slate-700/40 transition-colors group"
                     >
-                      {/* STATUS (Semáforo) */}
                       <td className="px-4 py-3 align-middle">
                         <div className="flex justify-center items-center">
                           {isExpired ? (
@@ -733,7 +894,6 @@ export default function App() {
                           )}
                         </div>
                       </td>
-                      {/* Plataforma */}
                       <td className="px-4 py-3 align-middle">
                         <span
                           className={`${platformColor} text-white px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase shadow-sm`}
@@ -741,25 +901,21 @@ export default function App() {
                           {client.platform}
                         </span>
                       </td>
-                      {/* ID */}
                       <td className="px-4 py-3 align-middle">
                         <span className="font-mono text-slate-300 text-xs">
                           {client.customId || "-"}
                         </span>
                       </td>
-                      {/* Usuario */}
                       <td className="px-4 py-3 align-middle">
                         <div className="text-slate-200 text-xs font-medium">
                           {client.username}
                         </div>
                       </td>
-                      {/* Nombre */}
                       <td className="px-4 py-3 align-middle">
                         <div className="font-semibold text-white text-sm">
                           {client.name}
                         </div>
                       </td>
-                      {/* Expiración */}
                       <td className="px-4 py-3 align-middle">
                         <span
                           className={`font-bold text-xs ${
@@ -773,7 +929,6 @@ export default function App() {
                           {formatDate(client.expiryDate)}
                         </span>
                       </td>
-                      {/* Acciones */}
                       <td className="px-4 py-3 align-middle text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
@@ -824,7 +979,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- MODAL DE RENOVACIÓN RÁPIDA/AVANZADA --- */}
+      {/* --- MODAL DE RENOVACIÓN --- */}
       {renewingClient && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -847,9 +1002,7 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-
             <div className="p-6 space-y-6">
-              {/* Info de Base */}
               <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 text-sm">
                 <p className="text-slate-400 mb-1">
                   Fecha de vencimiento actual:
@@ -864,8 +1017,6 @@ export default function App() {
                   )}
                 </div>
               </div>
-
-              {/* Selector de Fecha */}
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
                   Nueva Fecha de Expiración
@@ -887,8 +1038,6 @@ export default function App() {
                     : "Calculado desde su vencimiento anterior (Continuidad)"}
                 </p>
               </div>
-
-              {/* Botones Rápidos */}
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => applyRenewalPreset(1)}
@@ -909,8 +1058,6 @@ export default function App() {
                   +6 Meses
                 </button>
               </div>
-
-              {/* Botón Confirmar */}
               <button
                 onClick={confirmRenewal}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
@@ -922,11 +1069,10 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal DETALLES (El Ojito) */}
+      {/* --- MODAL DETALLES (El Ojito) --- */}
       {viewDetailsClient && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
-            {/* Header Modal */}
             <div className="relative h-24 bg-gradient-to-r from-blue-900 to-slate-900 p-6 flex justify-between items-start">
               <div className="flex items-center gap-4">
                 <div
@@ -953,10 +1099,7 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            {/* Body Modal */}
             <div className="p-6 space-y-6">
-              {/* Grid Principal */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <DetailItem
                   icon={<Tv className="w-4 h-4" />}
@@ -983,10 +1126,7 @@ export default function App() {
                   }
                 />
               </div>
-
               <div className="h-px bg-slate-700 my-2"></div>
-
-              {/* Info Secundaria (Lo que estaba oculto) */}
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Detalles de Suscripción
               </h3>
@@ -1014,7 +1154,6 @@ export default function App() {
                   </p>
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-slate-700/30 p-3 rounded-lg flex items-center justify-between border border-slate-700/30">
                   <span className="text-slate-400 text-sm">Conexiones</span>
@@ -1041,8 +1180,6 @@ export default function App() {
                   </span>
                 </div>
               </div>
-
-              {/* Botones Acciones Modal */}
               <div className="flex gap-3 mt-4 pt-4 border-t border-slate-700">
                 <button
                   onClick={() => {
@@ -1068,7 +1205,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal Edición / Creación */}
+      {/* --- MODAL EDICIÓN/CREACIÓN --- */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200 border border-slate-700">
@@ -1248,7 +1385,6 @@ function DetailItem({ icon, label, value, valueColor = "text-white" }) {
 }
 
 function StatsCard({ title, value, icon, color, active, onClick }) {
-  // Ajuste de "activeClass" para el nuevo Soft Dark Mode
   const activeClass = active
     ? "bg-slate-800 ring-1"
     : "bg-slate-800/60 hover:bg-slate-800";
