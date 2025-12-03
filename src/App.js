@@ -30,7 +30,7 @@ import {
   Palette,
   Download,
   Bell,
-  Copy, // Nuevo icono para copiar mensaje
+  Copy,
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -80,6 +80,32 @@ const db = getFirestore(app);
 const appId = typeof __app_id !== "undefined" ? __app_id : APP_ID_NEGOCIO;
 
 // --- Utilidades y Constantes ---
+
+// ------------------------------------------------------------------
+// 💬 Plantillas de Mensajes de WhatsApp (EDITA AQUÍ LOS TEXTOS)
+// ------------------------------------------------------------------
+const MESSAGE_TEMPLATES = {
+  // 1. Recordatorio Urgente (Vence Mañana)
+  reminderTomorrow: (name, platform, date) =>
+    `Hola ${name}, recordatorio amable: tu servicio de ${platform} vence MAÑANA (${date}). ¿Deseas renovar para no perder la señal? 📺`,
+
+  // 2. Recuperación (Venció hace 15 días)
+  recovery15Days: (name, platform) =>
+    `Hola ${name}, te extrañamos. Han pasado 15 días desde que venció tu cuenta de ${platform}. ¿Te gustaría reactivar el servicio hoy? 👋`,
+
+  // 3. Ya Vencido (General)
+  expired: (name, platform, date) =>
+    `Hola ${name}, tu servicio de ${platform} venció el ${date}. ¿Te gustaría reactivarlo?`,
+
+  // 4. Por Vencer (Faltan 5 días o menos)
+  expiringSoon: (name, platform, date, days) =>
+    `Hola ${name}, recordatorio: tu cuenta de ${platform} vence pronto, el ${date} (en ${days} días). ¿Deseas renovar?`,
+
+  // 5. Activo (Enviar datos de cuenta)
+  active: (name, platform, username) =>
+    `Hola ${name}, aquí tienes los datos de tu cuenta ${platform}:\nUsuario: ${username}`,
+};
+// ------------------------------------------------------------------
 
 const DEFAULT_PLATFORMS = [
   { id: "LOTV", name: "LOTV", color: "bg-blue-600" },
@@ -329,8 +355,9 @@ export default function App() {
     isReactivation: false,
   });
 
-  // Nuevo estado para Notificaciones
+  // === AQUÍ ESTABA EL ERROR, AHORA SÍ LO AGREGAMOS ===
   const [showNotifications, setShowNotifications] = useState(false);
+  // ====================================================
 
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortOption, setSortOption] = useState("expiryDate");
@@ -638,31 +665,37 @@ export default function App() {
 
     const days = getDaysRemaining(client.expiryDate);
     let message = "";
+    const formattedDate = formatDate(client.expiryDate);
 
+    // Usamos las plantillas definidas arriba
     if (type === "reminder-tomorrow") {
-      message = `Hola ${client.name}, recordatorio amable: tu servicio de ${
-        client.platform
-      } vence MAÑANA (${formatDate(
-        client.expiryDate
-      )}). ¿Deseas renovar para no perder la señal? 📺`;
+      message = MESSAGE_TEMPLATES.reminderTomorrow(
+        client.name,
+        client.platform,
+        formattedDate
+      );
     } else if (type === "recovery-15") {
-      message = `Hola ${client.name}, te extrañamos. Han pasado 15 días desde que venció tu cuenta de ${client.platform}. ¿Te gustaría reactivar el servicio hoy? 👋`;
+      message = MESSAGE_TEMPLATES.recovery15Days(client.name, client.platform);
     } else {
-      // Lógica por defecto (Botón tabla)
       if (days < 0) {
-        message = `Hola ${client.name}, tu servicio de ${
-          client.platform
-        } venció el ${formatDate(
-          client.expiryDate
-        )}. ¿Te gustaría reactivarlo?`;
+        message = MESSAGE_TEMPLATES.expired(
+          client.name,
+          client.platform,
+          formattedDate
+        );
       } else if (days <= 5) {
-        message = `Hola ${client.name}, recordatorio: tu cuenta de ${
-          client.platform
-        } vence pronto, el ${formatDate(
-          client.expiryDate
-        )} (en ${days} días). ¿Deseas renovar?`;
+        message = MESSAGE_TEMPLATES.expiringSoon(
+          client.name,
+          client.platform,
+          formattedDate,
+          days
+        );
       } else {
-        message = `Hola ${client.name}, aquí tienes los datos de tu cuenta ${client.platform}:\nUsuario: ${client.username}`;
+        message = MESSAGE_TEMPLATES.active(
+          client.name,
+          client.platform,
+          client.username
+        );
       }
     }
 
@@ -670,13 +703,11 @@ export default function App() {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
     if (isMobile) {
-      // Móvil: Deep Link a la API (dispara la app nativa)
       window.open(
         `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`,
         "_blank"
       );
     } else {
-      // Escritorio: WhatsApp Web (evita la landing page de "Download")
       window.open(
         `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`,
         "_blank"
