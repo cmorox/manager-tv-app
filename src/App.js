@@ -30,7 +30,9 @@ import {
   Palette,
   Download,
   Bell,
-  MessageSquare, // Nuevo icono para mensajes
+  Copy,
+  Check,
+  MessageSquare, // Icono corregido
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -94,7 +96,7 @@ const DEFAULT_PLATFORMS = [
 
 const DEFAULT_TEMPLATES = {
   reminderTomorrow:
-    "Hola {nombre}, tu servicio de {plataforma} vence MAÑANA ({fecha}). ¿Deseas renovar? 📺",
+    "Hola {nombre}, tu servicio de {plataforma} vence MAÑANA ({fecha}). ¿Deseas renovar para no perder la señal? 📺",
   recovery15Days:
     "Hola {nombre}, te extrañamos. Tu cuenta de {plataforma} venció hace 15 días. ¿Quieres reactivar hoy? 👋",
   expired:
@@ -188,6 +190,42 @@ const parseCSVDate = (dateStr) => {
   }
   return new Date().toISOString().split("T")[0];
 };
+
+// --- COMPONENTE HELPER: BARRA DE VARIABLES ---
+const VariableToolbar = ({ onInsert }) => (
+  <div className="flex flex-wrap gap-2 mb-2">
+    <button
+      onClick={() => onInsert("{nombre}")}
+      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded transition-colors border border-slate-600"
+    >
+      <User className="w-3 h-3" /> Nombre
+    </button>
+    <button
+      onClick={() => onInsert("{plataforma}")}
+      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded transition-colors border border-slate-600"
+    >
+      <Tv className="w-3 h-3" /> Plataforma
+    </button>
+    <button
+      onClick={() => onInsert("{fecha}")}
+      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded transition-colors border border-slate-600"
+    >
+      <Calendar className="w-3 h-3" /> Fecha
+    </button>
+    <button
+      onClick={() => onInsert("{usuario}")}
+      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded transition-colors border border-slate-600"
+    >
+      <Hash className="w-3 h-3" /> Usuario
+    </button>
+    <button
+      onClick={() => onInsert("{dias}")}
+      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded transition-colors border border-slate-600"
+    >
+      <Activity className="w-3 h-3" /> Días Restantes
+    </button>
+  </div>
+);
 
 // --- COMPONENTE LOGIN ---
 function LoginScreen() {
@@ -326,11 +364,14 @@ export default function App() {
   const [userPlatforms, setUserPlatforms] = useState(DEFAULT_PLATFORMS);
   const [userTemplates, setUserTemplates] = useState(DEFAULT_TEMPLATES);
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsTab, setSettingsTab] = useState("platforms"); // 'platforms' | 'messages'
+  const [settingsTab, setSettingsTab] = useState("platforms");
   const [newPlatformName, setNewPlatformName] = useState("");
   const [newPlatformColor, setNewPlatformColor] = useState(
     AVAILABLE_COLORS[0].class
   );
+
+  // Estado para Editar Plataforma
+  const [editingPlatform, setEditingPlatform] = useState(null);
 
   // Estados de UI
   const [searchTerm, setSearchTerm] = useState("");
@@ -390,7 +431,6 @@ export default function App() {
           if (data.platforms) setUserPlatforms(data.platforms);
           if (data.templates) setUserTemplates(data.templates);
         } else {
-          // Si no tiene config, usa las default
           setUserPlatforms(DEFAULT_PLATFORMS);
           setUserTemplates(DEFAULT_TEMPLATES);
         }
@@ -447,10 +487,44 @@ export default function App() {
     }
   };
 
+  // Lógica para Editar Plataforma
+  const startEditingPlatform = (plat) => {
+    setEditingPlatform({ ...plat });
+  };
+
+  const cancelEditingPlatform = () => {
+    setEditingPlatform(null);
+  };
+
+  const saveEditedPlatform = () => {
+    if (!editingPlatform.name.trim()) return;
+
+    const updatedPlatforms = userPlatforms.map((p) =>
+      p.id === editingPlatform.id
+        ? {
+            ...p,
+            name: editingPlatform.name.toUpperCase(),
+            color: editingPlatform.color,
+          }
+        : p
+    );
+
+    setUserPlatforms(updatedPlatforms);
+    saveSettingsToDB(updatedPlatforms, null);
+    setEditingPlatform(null);
+  };
+
   const handleUpdateTemplate = (key, value) => {
     const updated = { ...userTemplates, [key]: value };
     setUserTemplates(updated);
     saveSettingsToDB(null, updated);
+  };
+
+  // Helper para insertar variable en el cursor o al final
+  const insertIntoTemplate = (key, variable) => {
+    const currentText = userTemplates[key] || "";
+    const updatedText = currentText + " " + variable;
+    handleUpdateTemplate(key, updatedText);
   };
 
   // Carga de Clientes
@@ -664,23 +738,23 @@ export default function App() {
     const days = getDaysRemaining(client.expiryDate);
     let message = "";
     const formattedDate = formatDate(client.expiryDate);
+    const platformObj = userPlatforms.find((p) => p.id === client.platform);
+    const platformName = platformObj ? platformObj.name : client.platform;
 
-    // Función helper para reemplazar variables
     const processTemplate = (template) => {
       return template
         .replace("{nombre}", client.name)
-        .replace("{plataforma}", client.platform)
+        .replace("{plataforma}", platformName)
         .replace("{fecha}", formattedDate)
         .replace("{usuario}", client.username)
         .replace("{dias}", days);
     };
 
-    if (type === "reminder-tomorrow") {
+    if (type === "reminderTomorrow") {
       message = processTemplate(userTemplates.reminderTomorrow);
-    } else if (type === "recovery-15") {
+    } else if (type === "recovery15Days") {
       message = processTemplate(userTemplates.recovery15Days);
     } else {
-      // Lógica automática según estado
       if (days < 0) {
         message = processTemplate(userTemplates.expired);
       } else if (days <= 5) {
@@ -974,6 +1048,7 @@ export default function App() {
             </div>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            {/* Buscador */}
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
               <input
@@ -985,6 +1060,7 @@ export default function App() {
               />
             </div>
 
+            {/* Botones */}
             <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 items-center">
               <div className="relative">
                 <button
@@ -1129,9 +1205,12 @@ export default function App() {
                   const isExpired = daysRemaining < 0;
                   const isExpiringSoon =
                     daysRemaining >= 0 && daysRemaining <= 5;
-                  const platformColor =
-                    userPlatforms.find((p) => p.id === client.platform)
-                      ?.color || "bg-slate-600";
+                  // Buscar plataforma en la lista personalizada del usuario
+                  const platformObj = userPlatforms.find(
+                    (p) => p.id === client.platform
+                  );
+                  const platformColor = platformObj?.color || "bg-slate-600";
+                  const platformName = platformObj?.name || client.platform; // Nombre real para display
 
                   return (
                     <tr
@@ -1156,7 +1235,7 @@ export default function App() {
                         <span
                           className={`${platformColor} text-white px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase shadow-sm`}
                         >
-                          {client.platform}
+                          {platformName}
                         </span>
                       </td>
                       <td className="px-4 py-3 align-middle">
@@ -1248,7 +1327,7 @@ export default function App() {
       {/* --- MODAL CONFIGURACIÓN (PLATAFORMAS Y MENSAJES) --- */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200 h-[85vh] flex flex-col">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200 h-[85vh] flex flex-col">
             {/* Header */}
             <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
               <div className="flex items-center gap-3">
@@ -1336,7 +1415,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Lista Existente */}
+                  {/* Lista Existente con Edición */}
                   <div>
                     <h4 className="text-xs font-bold text-slate-500 mb-3 uppercase">
                       Plataformas Activas
@@ -1347,21 +1426,78 @@ export default function App() {
                           key={plat.id}
                           className="flex items-center justify-between bg-slate-800 p-3 rounded-lg border border-slate-700 group hover:border-slate-600 transition-colors"
                         >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`w-4 h-4 rounded-full ${plat.color}`}
-                            ></div>
-                            <span className="font-bold text-white text-sm">
-                              {plat.name}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => handleDeletePlatform(plat.id)}
-                            className="text-slate-500 hover:text-rose-400 p-1 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {editingPlatform?.id === plat.id ? (
+                            // MODO EDICIÓN
+                            <div className="flex gap-2 w-full items-center">
+                              <input
+                                type="text"
+                                className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs uppercase"
+                                value={editingPlatform.name}
+                                onChange={(e) =>
+                                  setEditingPlatform({
+                                    ...editingPlatform,
+                                    name: e.target.value,
+                                  })
+                                }
+                              />
+                              <select
+                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs"
+                                value={editingPlatform.color}
+                                onChange={(e) =>
+                                  setEditingPlatform({
+                                    ...editingPlatform,
+                                    color: e.target.value,
+                                  })
+                                }
+                              >
+                                {AVAILABLE_COLORS.map((c) => (
+                                  <option key={c.class} value={c.class}>
+                                    {c.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={saveEditedPlatform}
+                                className="text-emerald-400 hover:text-emerald-300 p-1"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={cancelEditingPlatform}
+                                className="text-rose-400 hover:text-rose-300 p-1"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            // MODO VISUALIZACIÓN
+                            <>
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`w-4 h-4 rounded-full ${plat.color}`}
+                                ></div>
+                                <span className="font-bold text-white text-sm">
+                                  {plat.name}
+                                </span>
+                              </div>
+                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => startEditingPlatform(plat)}
+                                  className="text-slate-500 hover:text-blue-400 p-1 rounded-md transition-colors"
+                                  title="Editar"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePlatform(plat.id)}
+                                  className="text-slate-500 hover:text-rose-400 p-1 rounded-md transition-colors"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1376,38 +1512,33 @@ export default function App() {
                     <h4 className="text-blue-300 font-bold text-sm mb-2 flex items-center gap-2">
                       <Activity className="w-4 h-4" /> Variables Disponibles
                     </h4>
-                    <p className="text-xs text-slate-300 leading-relaxed">
+                    <p className="text-xs text-slate-300 leading-relaxed mb-2">
                       Usa estas "palabras mágicas" en tus mensajes y se
                       reemplazarán automáticamente:
-                      <br />
-                      <span className="font-mono text-blue-200">{`{nombre}`}</span>{" "}
-                      - Nombre del cliente
-                      <br />
-                      <span className="font-mono text-blue-200">{`{plataforma}`}</span>{" "}
-                      - Servicio (ej: LOTV)
-                      <br />
-                      <span className="font-mono text-blue-200">{`{fecha}`}</span>{" "}
-                      - Fecha de vencimiento
-                      <br />
-                      <span className="font-mono text-blue-200">{`{usuario}`}</span>{" "}
-                      - ID de usuario
-                      <br />
-                      <span className="font-mono text-blue-200">{`{dias}`}</span>{" "}
-                      - Días restantes (solo en "Por Vencer")
                     </p>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="px-2 py-1 bg-blue-900/30 border border-blue-800 rounded text-xs font-mono text-blue-200">{`{nombre}`}</span>
+                      <span className="px-2 py-1 bg-blue-900/30 border border-blue-800 rounded text-xs font-mono text-blue-200">{`{plataforma}`}</span>
+                      <span className="px-2 py-1 bg-blue-900/30 border border-blue-800 rounded text-xs font-mono text-blue-200">{`{fecha}`}</span>
+                      <span className="px-2 py-1 bg-blue-900/30 border border-blue-800 rounded text-xs font-mono text-blue-200">{`{usuario}`}</span>
+                      <span className="px-2 py-1 bg-blue-900/30 border border-blue-800 rounded text-xs font-mono text-blue-200">{`{dias}`}</span>
+                    </div>
                   </div>
 
                   <div className="space-y-5">
+                    {/* Recordatorio Mañana */}
                     <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                       <div className="flex justify-between items-center mb-2">
                         <label className="text-sm font-bold text-yellow-400 flex items-center gap-2">
                           <AlertCircle className="w-4 h-4" /> Vence Mañana (1
                           día)
                         </label>
-                        <span className="text-[10px] text-slate-500 uppercase">
-                          Automático
-                        </span>
                       </div>
+                      <VariableToolbar
+                        onInsert={(v) =>
+                          insertIntoTemplate("reminderTomorrow", v)
+                        }
+                      />
                       <textarea
                         className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none min-h-[80px]"
                         value={userTemplates.reminderTomorrow}
@@ -1420,15 +1551,16 @@ export default function App() {
                       />
                     </div>
 
+                    {/* Por Vencer */}
                     <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                       <div className="flex justify-between items-center mb-2">
                         <label className="text-sm font-bold text-blue-400 flex items-center gap-2">
                           <Activity className="w-4 h-4" /> Por Vencer (≤ 5 días)
                         </label>
-                        <span className="text-[10px] text-slate-500 uppercase">
-                          Automático
-                        </span>
                       </div>
+                      <VariableToolbar
+                        onInsert={(v) => insertIntoTemplate("expiringSoon", v)}
+                      />
                       <textarea
                         className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none min-h-[80px]"
                         value={userTemplates.expiringSoon}
@@ -1438,15 +1570,16 @@ export default function App() {
                       />
                     </div>
 
+                    {/* Ya Vencido */}
                     <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                       <div className="flex justify-between items-center mb-2">
                         <label className="text-sm font-bold text-rose-400 flex items-center gap-2">
                           <X className="w-4 h-4" /> Ya Vencido (Hoy o antes)
                         </label>
-                        <span className="text-[10px] text-slate-500 uppercase">
-                          Automático
-                        </span>
                       </div>
+                      <VariableToolbar
+                        onInsert={(v) => insertIntoTemplate("expired", v)}
+                      />
                       <textarea
                         className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none min-h-[80px]"
                         value={userTemplates.expired}
@@ -1456,16 +1589,19 @@ export default function App() {
                       />
                     </div>
 
+                    {/* Recuperación */}
                     <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                       <div className="flex justify-between items-center mb-2">
                         <label className="text-sm font-bold text-purple-400 flex items-center gap-2">
                           <RefreshCw className="w-4 h-4" /> Recuperación (Hace
                           15 días)
                         </label>
-                        <span className="text-[10px] text-slate-500 uppercase">
-                          Automático
-                        </span>
                       </div>
+                      <VariableToolbar
+                        onInsert={(v) =>
+                          insertIntoTemplate("recovery15Days", v)
+                        }
+                      />
                       <textarea
                         className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none min-h-[80px]"
                         value={userTemplates.recovery15Days}
@@ -1475,16 +1611,17 @@ export default function App() {
                       />
                     </div>
 
+                    {/* Activo */}
                     <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                       <div className="flex justify-between items-center mb-2">
                         <label className="text-sm font-bold text-emerald-400 flex items-center gap-2">
                           <CheckCircle className="w-4 h-4" /> Activo (Datos de
                           cuenta)
                         </label>
-                        <span className="text-[10px] text-slate-500 uppercase">
-                          Automático
-                        </span>
                       </div>
+                      <VariableToolbar
+                        onInsert={(v) => insertIntoTemplate("active", v)}
+                      />
                       <textarea
                         className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none min-h-[80px]"
                         value={userTemplates.active}
@@ -1784,7 +1921,7 @@ export default function App() {
                             onClick={() =>
                               openWhatsApp(
                                 client,
-                                isUrgent ? "reminder-tomorrow" : "recovery-15"
+                                isUrgent ? "reminderTomorrow" : "recovery15Days"
                               )
                             }
                             className="w-full py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
