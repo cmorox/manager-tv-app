@@ -32,7 +32,9 @@ import {
   Bell,
   Copy,
   Check,
-  MessageSquare, // Icono corregido
+  MessageSquare,
+  CheckSquare, // Nuevo icono para completar tarea
+  Square,
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -386,6 +388,9 @@ export default function App() {
   });
 
   const [showNotifications, setShowNotifications] = useState(false);
+  // Estado para tareas completadas en notificaciones (guardado localmente por sesión por ahora)
+  const [completedTasks, setCompletedTasks] = useState([]);
+
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortOption, setSortOption] = useState("expiryDate");
   const fileInputRef = useRef(null);
@@ -953,6 +958,17 @@ export default function App() {
     setEditingClient(null);
   };
 
+  // Marcar/Desmarcar notificación como completada
+  const toggleCompleteTask = (id) => {
+    setCompletedTasks((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((taskId) => taskId !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
   const pendingNotifications = useMemo(() => {
     if (!clients.length) return [];
     return clients.filter((client) => {
@@ -1016,6 +1032,11 @@ export default function App() {
     return <LoginScreen />;
   }
 
+  // Filtrar notificaciones pendientes no completadas para el badge
+  const activeNotificationsCount = pendingNotifications.filter(
+    (n) => !completedTasks.includes(n.id)
+  ).length;
+
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-gray-100 pb-20 transition-colors duration-300">
       <input
@@ -1068,9 +1089,9 @@ export default function App() {
                   className="p-2 rounded-lg transition-all relative bg-slate-800 hover:bg-slate-700 text-slate-300"
                 >
                   <Bell className="w-5 h-5" />
-                  {pendingNotifications.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-lg animate-bounce">
-                      {pendingNotifications.length}
+                  {activeNotificationsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-lg">
+                      {activeNotificationsCount}
                     </span>
                   )}
                 </button>
@@ -1294,6 +1315,8 @@ export default function App() {
                           >
                             <RefreshCw className="w-4 h-4" />
                           </button>
+
+                          {/* ELIMINADO EL LÁPIZ (EDITAR) DE AQUÍ */}
 
                           <button
                             onClick={() => handleDelete(client.id)}
@@ -1636,6 +1659,134 @@ export default function App() {
         </div>
       )}
 
+      {/* --- MODAL NOTIFICACIONES (Ventana Flotante) --- */}
+      {showNotifications && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Bell className="w-5 h-5 text-blue-500" /> Notificaciones
+                Pendientes
+              </h3>
+              <button
+                onClick={() => setShowNotifications(false)}
+                className="text-slate-500 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto">
+              {pendingNotifications.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 text-sm flex flex-col items-center gap-2">
+                  <CheckCircle className="w-10 h-10 opacity-30 mb-2" />
+                  <p>¡Todo al día! No hay alertas hoy.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800">
+                  {pendingNotifications.map((client) => {
+                    const days = getDaysRemaining(client.expiryDate);
+                    const isUrgent = days === 1;
+                    const isCompleted = completedTasks.includes(client.id);
+
+                    return (
+                      <div
+                        key={client.id}
+                        className={`p-4 transition-colors ${
+                          isCompleted
+                            ? "bg-slate-900/50 opacity-60"
+                            : "hover:bg-slate-800/50"
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <p
+                              className={`font-bold text-sm ${
+                                isCompleted
+                                  ? "text-slate-400 line-through"
+                                  : "text-white"
+                              }`}
+                            >
+                              {client.name}
+                            </p>
+                            <p className="text-slate-400 text-xs mt-0.5">
+                              {client.platform} • {client.contact}
+                            </p>
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-1 rounded uppercase border ${
+                              isUrgent
+                                ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+                                : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            }`}
+                          >
+                            {isUrgent ? "Vence Mañana" : "Recuperación"}
+                          </span>
+                        </div>
+
+                        <div className="flex gap-2">
+                          {client.contact ? (
+                            <button
+                              onClick={() =>
+                                openWhatsApp(
+                                  client,
+                                  isUrgent
+                                    ? "reminderTomorrow"
+                                    : "recovery15Days"
+                                )
+                              }
+                              disabled={isCompleted}
+                              className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                                isCompleted
+                                  ? "bg-slate-800 text-slate-500 cursor-not-allowed"
+                                  : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:scale-[1.02]"
+                              }`}
+                            >
+                              <MessageCircle className="w-4 h-4" /> WhatsApp
+                            </button>
+                          ) : (
+                            <div className="flex-1 text-xs text-slate-600 text-center italic p-2 bg-slate-900 rounded border border-slate-800">
+                              Sin contacto
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => toggleCompleteTask(client.id)}
+                            className={`p-2 rounded-lg border transition-all ${
+                              isCompleted
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
+                            }`}
+                            title={
+                              isCompleted
+                                ? "Marcar como pendiente"
+                                : "Marcar como completado"
+                            }
+                          >
+                            {isCompleted ? (
+                              <CheckSquare className="w-4 h-4" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="p-4 bg-slate-900 border-t border-slate-800 text-center">
+              <button
+                onClick={() => setShowNotifications(false)}
+                className="text-slate-500 text-xs hover:text-white transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- MODAL RENOVACIÓN --- */}
       {renewingClient && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1722,395 +1873,6 @@ export default function App() {
                 Confirmar Renovación
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL DETALLES (El Ojito) --- */}
-      {viewDetailsClient && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="relative h-24 bg-gradient-to-r from-blue-900 to-slate-900 p-6 flex justify-between items-start">
-              <div className="flex items-center gap-4">
-                <div
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                    userPlatforms.find(
-                      (p) => p.id === viewDetailsClient.platform
-                    )?.color || "bg-slate-700"
-                  }`}
-                >
-                  <Monitor className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-white">
-                    {viewDetailsClient.name}
-                  </h2>
-                  <p className="text-blue-200 text-sm font-mono">
-                    {viewDetailsClient.username}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={closeDetailsModal}
-                className="text-white/50 hover:text-white bg-white/10 hover:bg-white/20 p-1 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <DetailItem
-                  icon={<Tv className="w-4 h-4" />}
-                  label="Plataforma"
-                  value={viewDetailsClient.platform}
-                />
-                <DetailItem
-                  icon={<Hash className="w-4 h-4" />}
-                  label="ID Sistema"
-                  value={viewDetailsClient.customId || "N/A"}
-                />
-                <DetailItem
-                  icon={<Activity className="w-4 h-4" />}
-                  label="Estado"
-                  value={
-                    getDaysRemaining(viewDetailsClient.expiryDate) < 0
-                      ? "Vencido"
-                      : "Activo"
-                  }
-                  valueColor={
-                    getDaysRemaining(viewDetailsClient.expiryDate) < 0
-                      ? "text-red-400"
-                      : "text-emerald-400"
-                  }
-                />
-              </div>
-              <div className="h-px bg-slate-700 my-2"></div>
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Detalles de Suscripción
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1">
-                    <Calendar className="w-4 h-4" />{" "}
-                    <span className="text-xs font-semibold uppercase">
-                      Inicio
-                    </span>
-                  </div>
-                  <p className="text-white font-medium">
-                    {formatDate(viewDetailsClient.startDate)}
-                  </p>
-                </div>
-                <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1">
-                    <AlertCircle className="w-4 h-4" />{" "}
-                    <span className="text-xs font-semibold uppercase">
-                      Expiración
-                    </span>
-                  </div>
-                  <p className="text-white font-medium text-lg">
-                    {formatDate(viewDetailsClient.expiryDate)}
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-700/30 p-3 rounded-lg flex items-center justify-between border border-slate-700/30">
-                  <span className="text-slate-400 text-sm">Conexiones</span>
-                  <span className="text-white font-bold flex items-center gap-2">
-                    <Wifi className="w-4 h-4 text-blue-400" />{" "}
-                    {viewDetailsClient.connections}
-                  </span>
-                </div>
-                <div className="bg-slate-700/30 p-3 rounded-lg flex items-center justify-between border border-slate-700/30">
-                  <span className="text-slate-400 text-sm">Contrataciones</span>
-                  <span className="text-white font-bold flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4 text-green-400" />{" "}
-                    {viewDetailsClient.renewals}
-                  </span>
-                </div>
-                <div
-                  className="bg-slate-700/30 p-3 rounded-lg flex items-center justify-between border border-slate-700/30 cursor-pointer hover:bg-slate-700/50 transition-colors"
-                  onClick={() => openWhatsApp(viewDetailsClient)}
-                >
-                  <span className="text-slate-400 text-sm">Contacto</span>
-                  <span className="text-white font-bold flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-emerald-400" />{" "}
-                    {viewDetailsClient.contact || "-"}
-                  </span>
-                </div>
-              </div>
-              <div className="flex gap-3 mt-4 pt-4 border-t border-slate-700">
-                <button
-                  onClick={() => {
-                    closeDetailsModal();
-                    handleOpenRenewalModal(viewDetailsClient);
-                  }}
-                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"
-                >
-                  Renovar Ahora
-                </button>
-                <button
-                  onClick={() => {
-                    closeDetailsModal();
-                    openModal(viewDetailsClient);
-                  }}
-                  className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
-                >
-                  Editar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL NOTIFICACIONES (Ventana Flotante) --- */}
-      {showNotifications && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
-              <h3 className="font-bold text-white flex items-center gap-2">
-                <Bell className="w-5 h-5 text-blue-500" /> Notificaciones
-                Pendientes
-              </h3>
-              <button
-                onClick={() => setShowNotifications(false)}
-                className="text-slate-500 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="max-h-[60vh] overflow-y-auto">
-              {pendingNotifications.length === 0 ? (
-                <div className="p-8 text-center text-slate-500 text-sm flex flex-col items-center gap-2">
-                  <CheckCircle className="w-10 h-10 opacity-30 mb-2" />
-                  <p>¡Todo al día! No hay alertas hoy.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-800">
-                  {pendingNotifications.map((client) => {
-                    const days = getDaysRemaining(client.expiryDate);
-                    const isUrgent = days === 1;
-                    return (
-                      <div
-                        key={client.id}
-                        className="p-4 hover:bg-slate-800/50 transition-colors"
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <p className="text-white font-bold text-sm">
-                              {client.name}
-                            </p>
-                            <p className="text-slate-400 text-xs mt-0.5">
-                              {client.platform} • {client.contact}
-                            </p>
-                          </div>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-1 rounded uppercase border ${
-                              isUrgent
-                                ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
-                                : "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                            }`}
-                          >
-                            {isUrgent ? "Vence Mañana" : "Recuperación"}
-                          </span>
-                        </div>
-                        {client.contact ? (
-                          <button
-                            onClick={() =>
-                              openWhatsApp(
-                                client,
-                                isUrgent ? "reminderTomorrow" : "recovery15Days"
-                              )
-                            }
-                            className="w-full py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
-                          >
-                            <MessageCircle className="w-4 h-4" /> Enviar
-                            Recordatorio por WhatsApp
-                          </button>
-                        ) : (
-                          <div className="text-xs text-slate-600 text-center italic p-2 bg-slate-900 rounded border border-slate-800">
-                            Sin número de contacto
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <div className="p-4 bg-slate-900 border-t border-slate-800 text-center">
-              <button
-                onClick={() => setShowNotifications(false)}
-                className="text-slate-500 text-xs hover:text-white transition-colors"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL EDICIÓN/CREACIÓN --- */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200 border border-slate-700">
-            <div className="px-6 py-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="font-bold text-lg text-white">
-                {editingClient ? "Editar Cliente" : "Nuevo Registro"}
-              </h3>
-              <button
-                onClick={closeModal}
-                className="text-slate-500 hover:text-white transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    Plataforma
-                  </label>
-                  <select
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white"
-                    value={formData.platform}
-                    onChange={(e) =>
-                      setFormData({ ...formData, platform: e.target.value })
-                    }
-                  >
-                    {userPlatforms.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    Usuario / ID
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
-                    placeholder="Ej. USER123"
-                    value={formData.username}
-                    onChange={(e) =>
-                      setFormData({ ...formData, username: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    Nombre Cliente
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
-                    placeholder="Nombre completo"
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    ID Personalizado
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
-                    placeholder="Opcional"
-                    value={formData.customId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, customId: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    WhatsApp
-                  </label>
-                  <input
-                    type="tel"
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
-                    placeholder="Solo números"
-                    value={formData.contact}
-                    onChange={(e) =>
-                      setFormData({ ...formData, contact: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    Dispositivos
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white"
-                    value={formData.connections}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        connections: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div className="bg-slate-900 p-3 rounded-lg border border-slate-600">
-                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                    Inicio
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 text-slate-300 [color-scheme:dark]"
-                    value={formData.startDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, startDate: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="bg-blue-900/20 p-3 rounded-lg border border-blue-900/30">
-                  <label className="block text-xs font-bold text-blue-400 mb-1.5 uppercase">
-                    Vencimiento
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 text-blue-300 font-bold [color-scheme:dark]"
-                    value={formData.expiryDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, expiryDate: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="flex-1 px-4 py-2.5 bg-slate-700 text-slate-300 font-medium rounded-lg hover:bg-slate-600 transition-colors text-sm border border-slate-600"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-500 shadow-lg shadow-blue-900/30 transition-all transform active:scale-[0.98] text-sm"
-                >
-                  Guardar
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
