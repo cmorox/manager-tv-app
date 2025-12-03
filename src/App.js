@@ -1295,8 +1295,6 @@ export default function App() {
                             <RefreshCw className="w-4 h-4" />
                           </button>
 
-                          {/* ELIMINADO EL LÁPIZ (EDITAR) DE AQUÍ */}
-
                           <button
                             onClick={() => handleDelete(client.id)}
                             className="p-1.5 text-rose-400 hover:text-rose-300 transition-colors"
