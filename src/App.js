@@ -1741,7 +1741,10 @@ export default function App() {
                                   : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:scale-[1.02]"
                               }`}
                             >
-                              <MessageCircle className="w-4 h-4" /> WhatsApp
+                              <MessageCircle className="w-4 h-4" />
+                              {isCompleted
+                                ? "Completado"
+                                : "Enviar mensaje de WhatsApp"}
                             </button>
                           ) : (
                             <div className="flex-1 text-xs text-slate-600 text-center italic p-2 bg-slate-900 rounded border border-slate-800">
