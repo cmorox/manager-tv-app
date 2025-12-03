@@ -33,7 +33,7 @@ import {
   Copy,
   Check,
   MessageSquare,
-  CheckSquare, // Nuevo icono para completar tarea
+  CheckSquare,
   Square,
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
@@ -362,7 +362,7 @@ export default function App() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Estado para Configuración (Plataformas y Mensajes)
+  // Estado para Configuración
   const [userPlatforms, setUserPlatforms] = useState(DEFAULT_PLATFORMS);
   const [userTemplates, setUserTemplates] = useState(DEFAULT_TEMPLATES);
   const [showSettings, setShowSettings] = useState(false);
@@ -371,8 +371,6 @@ export default function App() {
   const [newPlatformColor, setNewPlatformColor] = useState(
     AVAILABLE_COLORS[0].class
   );
-
-  // Estado para Editar Plataforma
   const [editingPlatform, setEditingPlatform] = useState(null);
 
   // Estados de UI
@@ -388,9 +386,7 @@ export default function App() {
   });
 
   const [showNotifications, setShowNotifications] = useState(false);
-  // Estado para tareas completadas en notificaciones (guardado localmente por sesión por ahora)
   const [completedTasks, setCompletedTasks] = useState([]);
-
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortOption, setSortOption] = useState("expiryDate");
   const fileInputRef = useRef(null);
@@ -416,7 +412,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Carga de Configuración Personalizada (Plataformas y Mensajes)
+  // Carga de Configuración
   useEffect(() => {
     if (!user) return;
     const fetchSettings = async () => {
@@ -446,7 +442,7 @@ export default function App() {
     fetchSettings();
   }, [user]);
 
-  // Guardar Configuración en DB
+  // Guardar Configuración
   const saveSettingsToDB = async (newPlatforms, newTemplates) => {
     if (!user) return;
     try {
@@ -492,18 +488,11 @@ export default function App() {
     }
   };
 
-  // Lógica para Editar Plataforma
-  const startEditingPlatform = (plat) => {
-    setEditingPlatform({ ...plat });
-  };
-
-  const cancelEditingPlatform = () => {
-    setEditingPlatform(null);
-  };
+  const startEditingPlatform = (plat) => setEditingPlatform({ ...plat });
+  const cancelEditingPlatform = () => setEditingPlatform(null);
 
   const saveEditedPlatform = () => {
     if (!editingPlatform.name.trim()) return;
-
     const updatedPlatforms = userPlatforms.map((p) =>
       p.id === editingPlatform.id
         ? {
@@ -513,7 +502,6 @@ export default function App() {
           }
         : p
     );
-
     setUserPlatforms(updatedPlatforms);
     saveSettingsToDB(updatedPlatforms, null);
     setEditingPlatform(null);
@@ -525,7 +513,6 @@ export default function App() {
     saveSettingsToDB(null, updated);
   };
 
-  // Helper para insertar variable en el cursor o al final
   const insertIntoTemplate = (key, variable) => {
     const currentText = userTemplates[key] || "";
     const updatedText = currentText + " " + variable;
@@ -538,7 +525,6 @@ export default function App() {
       setClients([]);
       return;
     }
-
     setLoading(true);
     const q = query(
       collection(db, "artifacts", appId, "users", user.uid, "clients")
@@ -604,9 +590,7 @@ export default function App() {
       await deleteDoc(
         doc(db, "artifacts", appId, "users", user.uid, "clients", id)
       );
-      if (viewDetailsClient && viewDetailsClient.id === id) {
-        closeDetailsModal();
-      }
+      if (viewDetailsClient && viewDetailsClient.id === id) closeDetailsModal();
     } catch (error) {
       console.error("Error eliminando:", error);
     }
@@ -624,7 +608,6 @@ export default function App() {
       !confirm("¿De verdad? Se borrarán todos los registros permanentemente.")
     )
       return;
-
     try {
       setLoading(true);
       const collectionRef = collection(
@@ -637,9 +620,7 @@ export default function App() {
       );
       const snapshot = await getDocs(collectionRef);
       const batch = writeBatch(db);
-      snapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
+      snapshot.docs.forEach((doc) => batch.delete(doc.ref));
       await batch.commit();
       alert("Se han eliminado todos los clientes.");
     } catch (error) {
@@ -694,19 +675,16 @@ export default function App() {
 
   const confirmRenewal = async () => {
     if (!renewingClient || !user) return;
-
     try {
       const updates = {
         expiryDate: renewalData.newExpiryDate,
         renewals: (parseInt(renewingClient.renewals) || 0) + 1,
       };
-
       if (renewalData.isReactivation) {
         updates.startDate = renewalData.baseDateUsed
           .toISOString()
           .split("T")[0];
       }
-
       await updateDoc(
         doc(
           db,
@@ -720,9 +698,8 @@ export default function App() {
         updates
       );
       setRenewingClient(null);
-      if (viewDetailsClient && viewDetailsClient.id === renewingClient.id) {
+      if (viewDetailsClient && viewDetailsClient.id === renewingClient.id)
         closeDetailsModal();
-      }
     } catch (error) {
       console.error("Error renovando:", error);
       alert("Error al guardar la renovación.");
@@ -733,10 +710,9 @@ export default function App() {
     handleOpenRenewalModal(client);
   };
 
-  // --- FUNCIÓN WHATSAPP INTELIGENTE (Usa las plantillas del estado) ---
+  // --- FUNCIÓN WHATSAPP INTELIGENTE ---
   const openWhatsApp = (client, type = "default") => {
     if (!client || !client.contact) return;
-
     const cleanPhone = client.contact.replace(/\D/g, "");
     if (!cleanPhone) return;
 
@@ -910,6 +886,9 @@ export default function App() {
 
   const triggerFileUpload = () => fileInputRef.current.click();
 
+  // --- FUNCIONES PARA MODALES ---
+
+  // 1. Modal Crear/Editar
   const openModal = (client = null) => {
     if (client) {
       setEditingClient(client);
@@ -928,8 +907,12 @@ export default function App() {
       setEditingClient(null);
       const today = new Date();
       const nextMonth = new Date(new Date().setMonth(today.getMonth() + 1));
+      // Safe fallback if platforms empty
       const defaultPlatform =
-        userPlatforms.length > 0 ? userPlatforms[0].id : "OTRO";
+        Array.isArray(userPlatforms) && userPlatforms.length > 0
+          ? userPlatforms[0].id
+          : "OTRO";
+
       setFormData({
         platform: defaultPlatform,
         customId: "",
@@ -945,6 +928,12 @@ export default function App() {
     setShowModal(true);
   };
 
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingClient(null);
+  };
+
+  // 2. Modal Detalles
   const openDetailsModal = (client) => {
     setViewDetailsClient(client);
   };
@@ -953,12 +942,6 @@ export default function App() {
     setViewDetailsClient(null);
   };
 
-  const closeModal = () => {
-    setShowModal(false);
-    setEditingClient(null);
-  };
-
-  // Marcar/Desmarcar notificación como completada
   const toggleCompleteTask = (id) => {
     setCompletedTasks((prev) => {
       if (prev.includes(id)) {
@@ -1020,6 +1003,10 @@ export default function App() {
     return { active, expired, expiringSoon, total: clients.length };
   }, [clients]);
 
+  const activeNotificationsCount = pendingNotifications.filter(
+    (n) => !completedTasks.includes(n.id)
+  ).length;
+
   if (authChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-blue-400 font-medium">
@@ -1031,11 +1018,6 @@ export default function App() {
   if (!user) {
     return <LoginScreen />;
   }
-
-  // Filtrar notificaciones pendientes no completadas para el badge
-  const activeNotificationsCount = pendingNotifications.filter(
-    (n) => !completedTasks.includes(n.id)
-  ).length;
 
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-gray-100 pb-20 transition-colors duration-300">
@@ -1347,7 +1329,7 @@ export default function App() {
 
       {/* --- MODAL CONFIGURACIÓN (PLATAFORMAS Y MENSAJES) --- */}
       {showSettings && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200 h-[85vh] flex flex-col">
             {/* Header */}
             <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
@@ -1659,9 +1641,236 @@ export default function App() {
         </div>
       )}
 
+      {/* --- MODAL RENOVACIÓN --- */}
+      {renewingClient && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-600/20 p-2 rounded-lg text-emerald-500">
+                  <RefreshCw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white">Renovar Suscripción</h3>
+                  <p className="text-xs text-slate-400">
+                    Cliente: {renewingClient.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setRenewingClient(null)}
+                className="text-slate-500 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 text-sm">
+                <p className="text-slate-400 mb-1">
+                  Fecha de vencimiento actual:
+                </p>
+                <div className="flex items-center gap-2 text-white font-mono">
+                  <Calendar className="w-4 h-4 text-slate-500" />
+                  {formatDate(renewingClient.expiryDate)}
+                  {renewalData.isReactivation && (
+                    <span className="text-xs bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded ml-auto">
+                      Vencido
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
+                  Nueva Fecha de Expiración
+                </label>
+                <input
+                  type="date"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 px-4 text-white text-lg font-bold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none [color-scheme:dark]"
+                  value={renewalData.newExpiryDate}
+                  onChange={(e) =>
+                    setRenewalData({
+                      ...renewalData,
+                      newExpiryDate: e.target.value,
+                    })
+                  }
+                />
+                <p className="text-xs text-slate-500 mt-2">
+                  {renewalData.isReactivation
+                    ? "Calculado desde HOY (Reactivación)"
+                    : "Calculado desde su vencimiento anterior (Continuidad)"}
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => applyRenewalPreset(1)}
+                  className="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 rounded-lg text-sm font-medium transition-all"
+                >
+                  +1 Mes
+                </button>
+                <button
+                  onClick={() => applyRenewalPreset(3)}
+                  className="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-blue-500/50 text-slate-300 hover:text-blue-400 rounded-lg text-sm font-medium transition-all"
+                >
+                  +3 Meses
+                </button>
+                <button
+                  onClick={() => applyRenewalPreset(6)}
+                  className="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-purple-500/50 text-slate-300 hover:text-purple-400 rounded-lg text-sm font-medium transition-all"
+                >
+                  +6 Meses
+                </button>
+              </div>
+              <button
+                onClick={confirmRenewal}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                Confirmar Renovación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL DETALLES (El Ojito) --- */}
+      {viewDetailsClient && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="relative h-24 bg-gradient-to-r from-blue-900 to-slate-900 p-6 flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <div
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
+                    userPlatforms.find(
+                      (p) => p.id === viewDetailsClient.platform
+                    )?.color || "bg-slate-700"
+                  }`}
+                >
+                  <Monitor className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">
+                    {viewDetailsClient.name}
+                  </h2>
+                  <p className="text-blue-200 text-sm font-mono">
+                    {viewDetailsClient.username}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeDetailsModal}
+                className="text-white/50 hover:text-white bg-white/10 hover:bg-white/20 p-1 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <DetailItem
+                  icon={<Tv className="w-4 h-4" />}
+                  label="Plataforma"
+                  value={viewDetailsClient.platform}
+                />
+                <DetailItem
+                  icon={<Hash className="w-4 h-4" />}
+                  label="ID Sistema"
+                  value={viewDetailsClient.customId || "N/A"}
+                />
+                <DetailItem
+                  icon={<Activity className="w-4 h-4" />}
+                  label="Estado"
+                  value={
+                    getDaysRemaining(viewDetailsClient.expiryDate) < 0
+                      ? "Vencido"
+                      : "Activo"
+                  }
+                  valueColor={
+                    getDaysRemaining(viewDetailsClient.expiryDate) < 0
+                      ? "text-red-400"
+                      : "text-emerald-400"
+                  }
+                />
+              </div>
+              <div className="h-px bg-slate-700 my-2"></div>
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Detalles de Suscripción
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                  <div className="flex items-center gap-2 text-slate-400 mb-1">
+                    <Calendar className="w-4 h-4" />{" "}
+                    <span className="text-xs font-semibold uppercase">
+                      Inicio
+                    </span>
+                  </div>
+                  <p className="text-white font-medium">
+                    {formatDate(viewDetailsClient.startDate)}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                  <div className="flex items-center gap-2 text-slate-400 mb-1">
+                    <AlertCircle className="w-4 h-4" />{" "}
+                    <span className="text-xs font-semibold uppercase">
+                      Expiración
+                    </span>
+                  </div>
+                  <p className="text-white font-medium text-lg">
+                    {formatDate(viewDetailsClient.expiryDate)}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-700/30 p-3 rounded-lg flex items-center justify-between border border-slate-700/30">
+                  <span className="text-slate-400 text-sm">Conexiones</span>
+                  <span className="text-white font-bold flex items-center gap-2">
+                    <Wifi className="w-4 h-4 text-blue-400" />{" "}
+                    {viewDetailsClient.connections}
+                  </span>
+                </div>
+                <div className="bg-slate-700/30 p-3 rounded-lg flex items-center justify-between border border-slate-700/30">
+                  <span className="text-slate-400 text-sm">Contrataciones</span>
+                  <span className="text-white font-bold flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-green-400" />{" "}
+                    {viewDetailsClient.renewals}
+                  </span>
+                </div>
+                <div
+                  className="bg-slate-700/30 p-3 rounded-lg flex items-center justify-between border border-slate-700/30 cursor-pointer hover:bg-slate-700/50 transition-colors"
+                  onClick={() => openWhatsApp(viewDetailsClient)}
+                >
+                  <span className="text-slate-400 text-sm">Contacto</span>
+                  <span className="text-white font-bold flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-emerald-400" />{" "}
+                    {viewDetailsClient.contact || "-"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-4 pt-4 border-t border-slate-700">
+                <button
+                  onClick={() => {
+                    closeDetailsModal();
+                    handleOpenRenewalModal(viewDetailsClient);
+                  }}
+                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"
+                >
+                  Renovar Ahora
+                </button>
+                <button
+                  onClick={() => {
+                    closeDetailsModal();
+                    openModal(viewDetailsClient);
+                  }}
+                  className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+                >
+                  Editar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- MODAL NOTIFICACIONES (Ventana Flotante) --- */}
       {showNotifications && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
               <h3 className="font-bold text-white flex items-center gap-2">
@@ -1790,92 +1999,167 @@ export default function App() {
         </div>
       )}
 
-      {/* --- MODAL RENOVACIÓN --- */}
-      {renewingClient && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
-              <div className="flex items-center gap-3">
-                <div className="bg-emerald-600/20 p-2 rounded-lg text-emerald-500">
-                  <RefreshCw className="w-5 h-5" />
+      {/* --- MODAL EDICIÓN/CREACIÓN --- */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200 border border-slate-700">
+            <div className="px-6 py-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
+              <h3 className="font-bold text-lg text-white">
+                {editingClient ? "Editar Cliente" : "Nuevo Registro"}
+              </h3>
+              <button
+                onClick={closeModal}
+                className="text-slate-500 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSave} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+                    Plataforma
+                  </label>
+                  <select
+                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white"
+                    value={formData.platform}
+                    onChange={(e) =>
+                      setFormData({ ...formData, platform: e.target.value })
+                    }
+                  >
+                    {userPlatforms.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <h3 className="font-bold text-white">Renovar Suscripción</h3>
-                  <p className="text-xs text-slate-400">
-                    Cliente: {renewingClient.name}
-                  </p>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+                    Usuario / ID
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
+                    placeholder="Ej. USER123"
+                    value={formData.username}
+                    onChange={(e) =>
+                      setFormData({ ...formData, username: e.target.value })
+                    }
+                  />
                 </div>
               </div>
-              <button
-                onClick={() => setRenewingClient(null)}
-                className="text-slate-500 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 text-sm">
-                <p className="text-slate-400 mb-1">
-                  Fecha de vencimiento actual:
-                </p>
-                <div className="flex items-center gap-2 text-white font-mono">
-                  <Calendar className="w-4 h-4 text-slate-500" />
-                  {formatDate(renewingClient.expiryDate)}
-                  {renewalData.isReactivation && (
-                    <span className="text-xs bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded ml-auto">
-                      Vencido
-                    </span>
-                  )}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+                    Nombre Cliente
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
+                    placeholder="Nombre completo"
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+                    ID Personalizado
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
+                    placeholder="Opcional"
+                    value={formData.customId}
+                    onChange={(e) =>
+                      setFormData({ ...formData, customId: e.target.value })
+                    }
+                  />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
-                  Nueva Fecha de Expiración
-                </label>
-                <input
-                  type="date"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 px-4 text-white text-lg font-bold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none [color-scheme:dark]"
-                  value={renewalData.newExpiryDate}
-                  onChange={(e) =>
-                    setRenewalData({
-                      ...renewalData,
-                      newExpiryDate: e.target.value,
-                    })
-                  }
-                />
-                <p className="text-xs text-slate-500 mt-2">
-                  {renewalData.isReactivation
-                    ? "Calculado desde HOY (Reactivación)"
-                    : "Calculado desde su vencimiento anterior (Continuidad)"}
-                </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+                    WhatsApp
+                  </label>
+                  <input
+                    type="tel"
+                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
+                    placeholder="Solo números"
+                    value={formData.contact}
+                    onChange={(e) =>
+                      setFormData({ ...formData, contact: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+                    Dispositivos
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white"
+                    value={formData.connections}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        connections: parseInt(e.target.value),
+                      })
+                    }
+                  />
+                </div>
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="bg-slate-900 p-3 rounded-lg border border-slate-600">
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
+                    Inicio
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 text-slate-300 [color-scheme:dark]"
+                    value={formData.startDate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, startDate: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="bg-blue-900/20 p-3 rounded-lg border border-blue-900/30">
+                  <label className="block text-xs font-bold text-blue-400 mb-1.5 uppercase">
+                    Vencimiento
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 text-blue-300 font-bold [color-scheme:dark]"
+                    value={formData.expiryDate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, expiryDate: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="pt-4 flex gap-3">
                 <button
-                  onClick={() => applyRenewalPreset(1)}
-                  className="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 rounded-lg text-sm font-medium transition-all"
+                  type="button"
+                  onClick={closeModal}
+                  className="flex-1 px-4 py-2.5 bg-slate-700 text-slate-300 font-medium rounded-lg hover:bg-slate-600 transition-colors text-sm border border-slate-600"
                 >
-                  +1 Mes
+                  Cancelar
                 </button>
                 <button
-                  onClick={() => applyRenewalPreset(3)}
-                  className="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-blue-500/50 text-slate-300 hover:text-blue-400 rounded-lg text-sm font-medium transition-all"
+                  type="submit"
+                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-500 shadow-lg shadow-blue-900/30 transition-all transform active:scale-[0.98] text-sm"
                 >
-                  +3 Meses
-                </button>
-                <button
-                  onClick={() => applyRenewalPreset(6)}
-                  className="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-purple-500/50 text-slate-300 hover:text-purple-400 rounded-lg text-sm font-medium transition-all"
-                >
-                  +6 Meses
+                  Guardar
                 </button>
               </div>
-              <button
-                onClick={confirmRenewal}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                Confirmar Renovación
-              </button>
-            </div>
+            </form>
           </div>
         </div>
       )}
