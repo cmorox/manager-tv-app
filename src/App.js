@@ -30,7 +30,7 @@ import {
   Palette,
   Download,
   Bell,
-  Copy,
+  MessageSquare, // Nuevo icono para mensajes
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -79,21 +79,7 @@ const db = getFirestore(app);
 
 const appId = typeof __app_id !== "undefined" ? __app_id : APP_ID_NEGOCIO;
 
-// --- Utilidades y Constantes ---
-
-// Plantillas de Mensajes
-const MESSAGE_TEMPLATES = {
-  reminderTomorrow: (name, platform, date) =>
-    `Hola ${name}, recordatorio amable: tu servicio de ${platform} vence MAÑANA (${date}). ¿Deseas renovar para no perder la señal? 📺`,
-  recovery15Days: (name, platform) =>
-    `Hola ${name}, te extrañamos. Han pasado 15 días desde que venció tu cuenta de ${platform}. ¿Te gustaría reactivar el servicio hoy? 👋`,
-  expired: (name, platform, date) =>
-    `Hola ${name}, tu servicio de ${platform} venció el ${date}. ¿Te gustaría reactivarlo?`,
-  expiringSoon: (name, platform, date, days) =>
-    `Hola ${name}, recordatorio: tu cuenta de ${platform} vence pronto, el ${date} (en ${days} días). ¿Deseas renovar?`,
-  active: (name, platform, username) =>
-    `Hola ${name}, aquí tienes los datos de tu cuenta ${platform}:\nUsuario: ${username}`,
-};
+// --- Constantes y Defaults ---
 
 const DEFAULT_PLATFORMS = [
   { id: "LOTV", name: "LOTV", color: "bg-blue-600" },
@@ -105,6 +91,19 @@ const DEFAULT_PLATFORMS = [
   { id: "LATAMPLUS", name: "LATAMPLUS", color: "bg-pink-600" },
   { id: "OTRO", name: "OTRO", color: "bg-emerald-600" },
 ];
+
+const DEFAULT_TEMPLATES = {
+  reminderTomorrow:
+    "Hola {nombre}, tu servicio de {plataforma} vence MAÑANA ({fecha}). ¿Deseas renovar? 📺",
+  recovery15Days:
+    "Hola {nombre}, te extrañamos. Tu cuenta de {plataforma} venció hace 15 días. ¿Quieres reactivar hoy? 👋",
+  expired:
+    "Hola {nombre}, tu servicio de {plataforma} venció el {fecha}. ¿Te gustaría reactivarlo?",
+  expiringSoon:
+    "Hola {nombre}, recordatorio: tu cuenta de {plataforma} vence pronto ({fecha}). ¿Deseas renovar?",
+  active:
+    "Hola {nombre}, aquí tienes los datos de tu cuenta {plataforma}:\nUsuario: {usuario}",
+};
 
 const AVAILABLE_COLORS = [
   { name: "Azul", class: "bg-blue-600" },
@@ -323,9 +322,11 @@ export default function App() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Estado para Plataformas Dinámicas
+  // Estado para Configuración (Plataformas y Mensajes)
   const [userPlatforms, setUserPlatforms] = useState(DEFAULT_PLATFORMS);
+  const [userTemplates, setUserTemplates] = useState(DEFAULT_TEMPLATES);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState("platforms"); // 'platforms' | 'messages'
   const [newPlatformName, setNewPlatformName] = useState("");
   const [newPlatformColor, setNewPlatformColor] = useState(
     AVAILABLE_COLORS[0].class
@@ -343,9 +344,7 @@ export default function App() {
     isReactivation: false,
   });
 
-  // ESTADO CORREGIDO PARA NOTIFICACIONES
   const [showNotifications, setShowNotifications] = useState(false);
-
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortOption, setSortOption] = useState("expiryDate");
   const fileInputRef = useRef(null);
@@ -371,7 +370,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Carga de Plataformas Personalizadas
+  // Carga de Configuración Personalizada (Plataformas y Mensajes)
   useEffect(() => {
     if (!user) return;
     const fetchSettings = async () => {
@@ -386,10 +385,14 @@ export default function App() {
           "general"
         );
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().platforms) {
-          setUserPlatforms(docSnap.data().platforms);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.platforms) setUserPlatforms(data.platforms);
+          if (data.templates) setUserTemplates(data.templates);
         } else {
+          // Si no tiene config, usa las default
           setUserPlatforms(DEFAULT_PLATFORMS);
+          setUserTemplates(DEFAULT_TEMPLATES);
         }
       } catch (error) {
         console.error("Error cargando configuración:", error);
@@ -398,18 +401,20 @@ export default function App() {
     fetchSettings();
   }, [user]);
 
-  const savePlatformsToDB = async (updatedPlatforms) => {
+  // Guardar Configuración en DB
+  const saveSettingsToDB = async (newPlatforms, newTemplates) => {
     if (!user) return;
     try {
       await setDoc(
         doc(db, "artifacts", appId, "users", user.uid, "settings", "general"),
         {
-          platforms: updatedPlatforms,
+          platforms: newPlatforms || userPlatforms,
+          templates: newTemplates || userTemplates,
         },
         { merge: true }
       );
     } catch (error) {
-      console.error("Error guardando plataformas:", error);
+      console.error("Error guardando configuración:", error);
     }
   };
 
@@ -426,7 +431,7 @@ export default function App() {
     }
     const updated = [...userPlatforms, newPlat];
     setUserPlatforms(updated);
-    savePlatformsToDB(updated);
+    saveSettingsToDB(updated, null);
     setNewPlatformName("");
   };
 
@@ -438,8 +443,14 @@ export default function App() {
     ) {
       const updated = userPlatforms.filter((p) => p.id !== id);
       setUserPlatforms(updated);
-      savePlatformsToDB(updated);
+      saveSettingsToDB(updated, null);
     }
+  };
+
+  const handleUpdateTemplate = (key, value) => {
+    const updated = { ...userTemplates, [key]: value };
+    setUserTemplates(updated);
+    saveSettingsToDB(null, updated);
   };
 
   // Carga de Clientes
@@ -643,6 +654,7 @@ export default function App() {
     handleOpenRenewalModal(client);
   };
 
+  // --- FUNCIÓN WHATSAPP INTELIGENTE (Usa las plantillas del estado) ---
   const openWhatsApp = (client, type = "default") => {
     if (!client || !client.contact) return;
 
@@ -653,34 +665,28 @@ export default function App() {
     let message = "";
     const formattedDate = formatDate(client.expiryDate);
 
+    // Función helper para reemplazar variables
+    const processTemplate = (template) => {
+      return template
+        .replace("{nombre}", client.name)
+        .replace("{plataforma}", client.platform)
+        .replace("{fecha}", formattedDate)
+        .replace("{usuario}", client.username)
+        .replace("{dias}", days);
+    };
+
     if (type === "reminder-tomorrow") {
-      message = MESSAGE_TEMPLATES.reminderTomorrow(
-        client.name,
-        client.platform,
-        formattedDate
-      );
+      message = processTemplate(userTemplates.reminderTomorrow);
     } else if (type === "recovery-15") {
-      message = MESSAGE_TEMPLATES.recovery15Days(client.name, client.platform);
+      message = processTemplate(userTemplates.recovery15Days);
     } else {
+      // Lógica automática según estado
       if (days < 0) {
-        message = MESSAGE_TEMPLATES.expired(
-          client.name,
-          client.platform,
-          formattedDate
-        );
+        message = processTemplate(userTemplates.expired);
       } else if (days <= 5) {
-        message = MESSAGE_TEMPLATES.expiringSoon(
-          client.name,
-          client.platform,
-          formattedDate,
-          days
-        );
+        message = processTemplate(userTemplates.expiringSoon);
       } else {
-        message = MESSAGE_TEMPLATES.active(
-          client.name,
-          client.platform,
-          client.username
-        );
+        message = processTemplate(userTemplates.active);
       }
     }
 
@@ -1041,6 +1047,7 @@ export default function App() {
       </div>
 
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <StatsCard
             title="Total Clientes"
@@ -1076,6 +1083,7 @@ export default function App() {
           />
         </div>
 
+        {/* Tabla */}
         <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700/50 overflow-hidden">
           <div className="p-4 border-b border-slate-700 bg-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3">
             <div className="flex items-center gap-3">
@@ -1181,6 +1189,7 @@ export default function App() {
                       </td>
                       <td className="px-4 py-3 align-middle text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {/* Botón WhatsApp DIRECTO */}
                           <button
                             onClick={() => openWhatsApp(client)}
                             className="p-1.5 text-emerald-400 bg-emerald-900/20 rounded-lg hover:bg-emerald-900/40 border border-emerald-900/30 transition-colors"
@@ -1206,12 +1215,9 @@ export default function App() {
                           >
                             <RefreshCw className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => openModal(client)}
-                            className="p-1.5 text-slate-400 hover:text-white transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
+
+                          {/* ELIMINADO EL LÁPIZ (EDITAR) DE AQUÍ */}
+
                           <button
                             onClick={() => handleDelete(client.id)}
                             className="p-1.5 text-rose-400 hover:text-rose-300 transition-colors"
@@ -1239,21 +1245,20 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- MODAL CONFIGURACIÓN PLATAFORMAS --- */}
+      {/* --- MODAL CONFIGURACIÓN (PLATAFORMAS Y MENSAJES) --- */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200 h-[80vh] flex flex-col">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200 h-[85vh] flex flex-col">
+            {/* Header */}
             <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
               <div className="flex items-center gap-3">
                 <div className="bg-slate-700 p-2 rounded-lg text-slate-300">
                   <Settings className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-white">
-                    Gestionar Plataformas
-                  </h3>
+                  <h3 className="font-bold text-white">Configuración</h3>
                   <p className="text-xs text-slate-400">
-                    Personaliza tus servicios
+                    Personaliza plataformas y mensajes
                   </p>
                 </div>
               </div>
@@ -1264,67 +1269,233 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                <label className="block text-xs font-bold text-slate-400 mb-3 uppercase">
-                  Agregar Nueva Plataforma
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Nombre (ej: NETFLIX)"
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 text-white text-sm focus:border-blue-500 outline-none uppercase"
-                    value={newPlatformName}
-                    onChange={(e) => setNewPlatformName(e.target.value)}
-                  />
-                  <select
-                    className="bg-slate-950 border border-slate-700 rounded-lg px-3 text-white text-sm outline-none"
-                    value={newPlatformColor}
-                    onChange={(e) => setNewPlatformColor(e.target.value)}
-                  >
-                    {AVAILABLE_COLORS.map((c) => (
-                      <option key={c.class} value={c.class}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={handleAddPlatform}
-                    className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors"
-                  >
-                    <Plus className="w-5 h-5" />
-                  </button>
+
+            {/* Tabs */}
+            <div className="flex border-b border-slate-800">
+              <button
+                onClick={() => setSettingsTab("platforms")}
+                className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
+                  settingsTab === "platforms"
+                    ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/30"
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <Tv className="w-4 h-4" /> Plataformas
                 </div>
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-slate-500 mb-3 uppercase">
-                  Plataformas Activas
-                </h4>
-                <div className="space-y-2">
-                  {userPlatforms.map((plat) => (
-                    <div
-                      key={plat.id}
-                      className="flex items-center justify-between bg-slate-800 p-3 rounded-lg border border-slate-700 group hover:border-slate-600 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-4 h-4 rounded-full ${plat.color}`}
-                        ></div>
-                        <span className="font-bold text-white text-sm">
-                          {plat.name}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleDeletePlatform(plat.id)}
-                        className="text-slate-500 hover:text-rose-400 p-1 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                        title="Eliminar"
+              </button>
+              <button
+                onClick={() => setSettingsTab("messages")}
+                className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
+                  settingsTab === "messages"
+                    ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/30"
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <MessageSquare className="w-4 h-4" /> Mensajes WhatsApp
+                </div>
+              </button>
+            </div>
+
+            {/* Contenido Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* TAB PLATAFORMAS */}
+              {settingsTab === "platforms" && (
+                <div className="space-y-6">
+                  {/* Agregar Nueva */}
+                  <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                    <label className="block text-xs font-bold text-slate-400 mb-3 uppercase">
+                      Agregar Nueva Plataforma
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nombre (ej: NETFLIX)"
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 text-white text-sm focus:border-blue-500 outline-none uppercase"
+                        value={newPlatformName}
+                        onChange={(e) => setNewPlatformName(e.target.value)}
+                      />
+                      <select
+                        className="bg-slate-950 border border-slate-700 rounded-lg px-3 text-white text-sm outline-none"
+                        value={newPlatformColor}
+                        onChange={(e) => setNewPlatformColor(e.target.value)}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {AVAILABLE_COLORS.map((c) => (
+                          <option key={c.class} value={c.class}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={handleAddPlatform}
+                        className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors"
+                      >
+                        <Plus className="w-5 h-5" />
                       </button>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Lista Existente */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 mb-3 uppercase">
+                      Plataformas Activas
+                    </h4>
+                    <div className="space-y-2">
+                      {userPlatforms.map((plat) => (
+                        <div
+                          key={plat.id}
+                          className="flex items-center justify-between bg-slate-800 p-3 rounded-lg border border-slate-700 group hover:border-slate-600 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-4 h-4 rounded-full ${plat.color}`}
+                            ></div>
+                            <span className="font-bold text-white text-sm">
+                              {plat.name}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleDeletePlatform(plat.id)}
+                            className="text-slate-500 hover:text-rose-400 p-1 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* TAB MENSAJES */}
+              {settingsTab === "messages" && (
+                <div className="space-y-6">
+                  <div className="bg-blue-900/20 border border-blue-900/50 p-4 rounded-lg mb-4">
+                    <h4 className="text-blue-300 font-bold text-sm mb-2 flex items-center gap-2">
+                      <Activity className="w-4 h-4" /> Variables Disponibles
+                    </h4>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      Usa estas "palabras mágicas" en tus mensajes y se
+                      reemplazarán automáticamente:
+                      <br />
+                      <span className="font-mono text-blue-200">{`{nombre}`}</span>{" "}
+                      - Nombre del cliente
+                      <br />
+                      <span className="font-mono text-blue-200">{`{plataforma}`}</span>{" "}
+                      - Servicio (ej: LOTV)
+                      <br />
+                      <span className="font-mono text-blue-200">{`{fecha}`}</span>{" "}
+                      - Fecha de vencimiento
+                      <br />
+                      <span className="font-mono text-blue-200">{`{usuario}`}</span>{" "}
+                      - ID de usuario
+                      <br />
+                      <span className="font-mono text-blue-200">{`{dias}`}</span>{" "}
+                      - Días restantes (solo en "Por Vencer")
+                    </p>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-bold text-yellow-400 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4" /> Vence Mañana (1
+                          día)
+                        </label>
+                        <span className="text-[10px] text-slate-500 uppercase">
+                          Automático
+                        </span>
+                      </div>
+                      <textarea
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none min-h-[80px]"
+                        value={userTemplates.reminderTomorrow}
+                        onChange={(e) =>
+                          handleUpdateTemplate(
+                            "reminderTomorrow",
+                            e.target.value
+                          )
+                        }
+                      />
+                    </div>
+
+                    <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-bold text-blue-400 flex items-center gap-2">
+                          <Activity className="w-4 h-4" /> Por Vencer (≤ 5 días)
+                        </label>
+                        <span className="text-[10px] text-slate-500 uppercase">
+                          Automático
+                        </span>
+                      </div>
+                      <textarea
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none min-h-[80px]"
+                        value={userTemplates.expiringSoon}
+                        onChange={(e) =>
+                          handleUpdateTemplate("expiringSoon", e.target.value)
+                        }
+                      />
+                    </div>
+
+                    <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-bold text-rose-400 flex items-center gap-2">
+                          <X className="w-4 h-4" /> Ya Vencido (Hoy o antes)
+                        </label>
+                        <span className="text-[10px] text-slate-500 uppercase">
+                          Automático
+                        </span>
+                      </div>
+                      <textarea
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none min-h-[80px]"
+                        value={userTemplates.expired}
+                        onChange={(e) =>
+                          handleUpdateTemplate("expired", e.target.value)
+                        }
+                      />
+                    </div>
+
+                    <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-bold text-purple-400 flex items-center gap-2">
+                          <RefreshCw className="w-4 h-4" /> Recuperación (Hace
+                          15 días)
+                        </label>
+                        <span className="text-[10px] text-slate-500 uppercase">
+                          Automático
+                        </span>
+                      </div>
+                      <textarea
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none min-h-[80px]"
+                        value={userTemplates.recovery15Days}
+                        onChange={(e) =>
+                          handleUpdateTemplate("recovery15Days", e.target.value)
+                        }
+                      />
+                    </div>
+
+                    <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4" /> Activo (Datos de
+                          cuenta)
+                        </label>
+                        <span className="text-[10px] text-slate-500 uppercase">
+                          Automático
+                        </span>
+                      </div>
+                      <textarea
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none min-h-[80px]"
+                        value={userTemplates.active}
+                        onChange={(e) =>
+                          handleUpdateTemplate("active", e.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
