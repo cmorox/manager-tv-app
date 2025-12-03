@@ -81,31 +81,19 @@ const appId = typeof __app_id !== "undefined" ? __app_id : APP_ID_NEGOCIO;
 
 // --- Utilidades y Constantes ---
 
-// ------------------------------------------------------------------
-// 💬 Plantillas de Mensajes de WhatsApp (EDITA AQUÍ LOS TEXTOS)
-// ------------------------------------------------------------------
+// Plantillas de Mensajes
 const MESSAGE_TEMPLATES = {
-  // 1. Recordatorio Urgente (Vence Mañana)
   reminderTomorrow: (name, platform, date) =>
     `Hola ${name}, recordatorio amable: tu servicio de ${platform} vence MAÑANA (${date}). ¿Deseas renovar para no perder la señal? 📺`,
-
-  // 2. Recuperación (Venció hace 15 días)
   recovery15Days: (name, platform) =>
     `Hola ${name}, te extrañamos. Han pasado 15 días desde que venció tu cuenta de ${platform}. ¿Te gustaría reactivar el servicio hoy? 👋`,
-
-  // 3. Ya Vencido (General)
   expired: (name, platform, date) =>
     `Hola ${name}, tu servicio de ${platform} venció el ${date}. ¿Te gustaría reactivarlo?`,
-
-  // 4. Por Vencer (Faltan 5 días o menos)
   expiringSoon: (name, platform, date, days) =>
     `Hola ${name}, recordatorio: tu cuenta de ${platform} vence pronto, el ${date} (en ${days} días). ¿Deseas renovar?`,
-
-  // 5. Activo (Enviar datos de cuenta)
   active: (name, platform, username) =>
     `Hola ${name}, aquí tienes los datos de tu cuenta ${platform}:\nUsuario: ${username}`,
 };
-// ------------------------------------------------------------------
 
 const DEFAULT_PLATFORMS = [
   { id: "LOTV", name: "LOTV", color: "bg-blue-600" },
@@ -355,9 +343,8 @@ export default function App() {
     isReactivation: false,
   });
 
-  // === AQUÍ ESTABA EL ERROR, AHORA SÍ LO AGREGAMOS ===
+  // ESTADO CORREGIDO PARA NOTIFICACIONES
   const [showNotifications, setShowNotifications] = useState(false);
-  // ====================================================
 
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortOption, setSortOption] = useState("expiryDate");
@@ -656,7 +643,6 @@ export default function App() {
     handleOpenRenewalModal(client);
   };
 
-  // --- FUNCIÓN WHATSAPP OPTIMIZADA (Móvil/PC) ---
   const openWhatsApp = (client, type = "default") => {
     if (!client || !client.contact) return;
 
@@ -667,7 +653,6 @@ export default function App() {
     let message = "";
     const formattedDate = formatDate(client.expiryDate);
 
-    // Usamos las plantillas definidas arriba
     if (type === "reminder-tomorrow") {
       message = MESSAGE_TEMPLATES.reminderTomorrow(
         client.name,
@@ -715,7 +700,6 @@ export default function App() {
     }
   };
 
-  // --- LÓGICA DE EXPORTACIÓN CSV ---
   const handleExportCSV = () => {
     if (clients.length === 0) {
       alert("No hay clientes para exportar.");
@@ -889,7 +873,6 @@ export default function App() {
     setEditingClient(null);
   };
 
-  // --- CÁLCULO DE NOTIFICACIONES PENDIENTES ---
   const pendingNotifications = useMemo(() => {
     if (!clients.length) return [];
     return clients.filter((client) => {
@@ -941,8 +924,6 @@ export default function App() {
     return { active, expired, expiringSoon, total: clients.length };
   }, [clients]);
 
-  // --- RENDERIZADO CONDICIONAL ---
-
   if (authChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-blue-400 font-medium">
@@ -955,7 +936,6 @@ export default function App() {
     return <LoginScreen />;
   }
 
-  // --- APP PRINCIPAL ---
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-gray-100 pb-20 transition-colors duration-300">
       <input
@@ -988,7 +968,6 @@ export default function App() {
             </div>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            {/* Buscador */}
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
               <input
@@ -1000,17 +979,11 @@ export default function App() {
               />
             </div>
 
-            {/* Botones */}
             <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 items-center">
-              {/* BOTÓN NOTIFICACIONES */}
               <div className="relative">
                 <button
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className={`p-2 rounded-lg transition-all relative ${
-                    showNotifications
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                  }`}
+                  onClick={() => setShowNotifications(true)}
+                  className="p-2 rounded-lg transition-all relative bg-slate-800 hover:bg-slate-700 text-slate-300"
                 >
                   <Bell className="w-5 h-5" />
                   {pendingNotifications.length > 0 && (
@@ -1019,75 +992,6 @@ export default function App() {
                     </span>
                   )}
                 </button>
-
-                {/* DROPDOWN NOTIFICACIONES */}
-                {showNotifications && (
-                  <div className="absolute top-full right-0 mt-2 w-80 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                    <div className="p-3 border-b border-slate-700 bg-slate-900/50">
-                      <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                        <Bell className="w-4 h-4 text-blue-400" /> Tareas
-                        Pendientes
-                      </h4>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto">
-                      {pendingNotifications.length === 0 ? (
-                        <div className="p-6 text-center text-slate-500 text-sm">
-                          <CheckCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                          ¡Todo al día! No hay alertas hoy.
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-slate-700">
-                          {pendingNotifications.map((client) => {
-                            const days = getDaysRemaining(client.expiryDate);
-                            const isUrgent = days === 1; // Vence mañana
-                            return (
-                              <div
-                                key={client.id}
-                                className="p-3 hover:bg-slate-700/30 transition-colors"
-                              >
-                                <div className="flex justify-between items-start mb-2">
-                                  <div>
-                                    <p className="text-white font-medium text-sm">
-                                      {client.name}
-                                    </p>
-                                    <p className="text-slate-400 text-xs">
-                                      {client.platform} • {client.contact}
-                                    </p>
-                                  </div>
-                                  <span
-                                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
-                                      isUrgent
-                                        ? "bg-yellow-500/20 text-yellow-400"
-                                        : "bg-blue-500/20 text-blue-400"
-                                    }`}
-                                  >
-                                    {isUrgent ? "Vence Mañana" : "Recuperación"}
-                                  </span>
-                                </div>
-                                {client.contact && (
-                                  <button
-                                    onClick={() =>
-                                      openWhatsApp(
-                                        client,
-                                        isUrgent
-                                          ? "reminder-tomorrow"
-                                          : "recovery-15"
-                                      )
-                                    }
-                                    className="w-full py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-600/30 rounded text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
-                                  >
-                                    <MessageCircle className="w-3 h-3" /> Enviar
-                                    Recordatorio
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="w-px h-6 bg-slate-700 mx-1 hidden sm:block"></div>
@@ -1137,7 +1041,6 @@ export default function App() {
       </div>
 
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <StatsCard
             title="Total Clientes"
@@ -1173,7 +1076,6 @@ export default function App() {
           />
         </div>
 
-        {/* Tabla */}
         <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700/50 overflow-hidden">
           <div className="p-4 border-b border-slate-700 bg-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3">
             <div className="flex items-center gap-3">
@@ -1219,7 +1121,6 @@ export default function App() {
                   const isExpired = daysRemaining < 0;
                   const isExpiringSoon =
                     daysRemaining >= 0 && daysRemaining <= 5;
-                  // Buscar plataforma en la lista personalizada del usuario
                   const platformColor =
                     userPlatforms.find((p) => p.id === client.platform)
                       ?.color || "bg-slate-600";
@@ -1280,7 +1181,6 @@ export default function App() {
                       </td>
                       <td className="px-4 py-3 align-middle text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {/* Botón WhatsApp DIRECTO */}
                           <button
                             onClick={() => openWhatsApp(client)}
                             className="p-1.5 text-emerald-400 bg-emerald-900/20 rounded-lg hover:bg-emerald-900/40 border border-emerald-900/30 transition-colors"
@@ -1364,10 +1264,7 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            {/* Contenido Scrollable */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Agregar Nueva */}
               <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
                 <label className="block text-xs font-bold text-slate-400 mb-3 uppercase">
                   Agregar Nueva Plataforma
@@ -1399,8 +1296,6 @@ export default function App() {
                   </button>
                 </div>
               </div>
-
-              {/* Lista Existente */}
               <div>
                 <h4 className="text-xs font-bold text-slate-500 mb-3 uppercase">
                   Plataformas Activas
@@ -1657,6 +1552,93 @@ export default function App() {
                   Editar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL NOTIFICACIONES (Ventana Flotante) --- */}
+      {showNotifications && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Bell className="w-5 h-5 text-blue-500" /> Notificaciones
+                Pendientes
+              </h3>
+              <button
+                onClick={() => setShowNotifications(false)}
+                className="text-slate-500 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto">
+              {pendingNotifications.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 text-sm flex flex-col items-center gap-2">
+                  <CheckCircle className="w-10 h-10 opacity-30 mb-2" />
+                  <p>¡Todo al día! No hay alertas hoy.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800">
+                  {pendingNotifications.map((client) => {
+                    const days = getDaysRemaining(client.expiryDate);
+                    const isUrgent = days === 1;
+                    return (
+                      <div
+                        key={client.id}
+                        className="p-4 hover:bg-slate-800/50 transition-colors"
+                      >
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <p className="text-white font-bold text-sm">
+                              {client.name}
+                            </p>
+                            <p className="text-slate-400 text-xs mt-0.5">
+                              {client.platform} • {client.contact}
+                            </p>
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-1 rounded uppercase border ${
+                              isUrgent
+                                ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+                                : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            }`}
+                          >
+                            {isUrgent ? "Vence Mañana" : "Recuperación"}
+                          </span>
+                        </div>
+                        {client.contact ? (
+                          <button
+                            onClick={() =>
+                              openWhatsApp(
+                                client,
+                                isUrgent ? "reminder-tomorrow" : "recovery-15"
+                              )
+                            }
+                            className="w-full py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
+                          >
+                            <MessageCircle className="w-4 h-4" /> Enviar
+                            Recordatorio por WhatsApp
+                          </button>
+                        ) : (
+                          <div className="text-xs text-slate-600 text-center italic p-2 bg-slate-900 rounded border border-slate-800">
+                            Sin número de contacto
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="p-4 bg-slate-900 border-t border-slate-800 text-center">
+              <button
+                onClick={() => setShowNotifications(false)}
+                className="text-slate-500 text-xs hover:text-white transition-colors"
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>
