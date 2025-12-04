@@ -17,7 +17,7 @@ import {
   Tv,
   Wifi,
   Eye,
-  EyeOff, // Se mantiene para el Login
+  EyeOff,
   X,
   Calendar,
   Phone,
@@ -41,6 +41,7 @@ import {
   HelpCircle,
   CreditCard,
   PartyPopper,
+  FileDown, // Icono para descargar plantilla
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -120,6 +121,13 @@ const DEFAULT_TEMPLATES = {
     "¡Hola {nombre}! Bienvenido a {plataforma}. 🌟\nTus datos de acceso son:\nUsuario: {usuario}\nExpiración: {fecha}\n¡Que lo disfrutes!",
   paymentReceived:
     "¡Gracias por tu pago {nombre}! 💸\nTu servicio de {plataforma} ha sido renovado correctamente.\nNueva fecha de vencimiento: {fecha}. ✅",
+};
+
+// Configuración de notificaciones por defecto (todas activas)
+const DEFAULT_NOTIFICATION_PREFS = {
+  checkIn15Days: true, // Seguimiento
+  reminderTomorrow: true, // Urgencia
+  recovery15Days: true, // Recuperación
 };
 
 const AVAILABLE_COLORS = [
@@ -339,6 +347,9 @@ export default function App() {
 
   const [userPlatforms, setUserPlatforms] = useState(DEFAULT_PLATFORMS);
   const [userTemplates, setUserTemplates] = useState(DEFAULT_TEMPLATES);
+  const [userNotificationPrefs, setUserNotificationPrefs] = useState(
+    DEFAULT_NOTIFICATION_PREFS
+  ); // Estado de preferencias
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState("platforms");
   const [newPlatformName, setNewPlatformName] = useState("");
@@ -408,7 +419,7 @@ export default function App() {
     }
   }, [user]);
 
-  // Carga Config
+  // Carga Configuración
   useEffect(() => {
     if (!user) return;
     const fetchSettings = async () => {
@@ -427,9 +438,12 @@ export default function App() {
           const data = docSnap.data();
           if (data.platforms) setUserPlatforms(data.platforms);
           if (data.templates) setUserTemplates(data.templates);
+          if (data.notificationPrefs)
+            setUserNotificationPrefs(data.notificationPrefs);
         } else {
           setUserPlatforms(DEFAULT_PLATFORMS);
           setUserTemplates(DEFAULT_TEMPLATES);
+          setUserNotificationPrefs(DEFAULT_NOTIFICATION_PREFS);
         }
       } catch (error) {
         console.error(error);
@@ -484,11 +498,12 @@ export default function App() {
     }
   }, [isAdmin, showAdminPanel]);
 
+  // --- FUNCIONES ---
   const handleLogout = async () => {
     await signOut(auth);
   };
 
-  const saveSettingsToDB = async (newPlatforms, newTemplates) => {
+  const saveSettingsToDB = async (newPlatforms, newTemplates, newPrefs) => {
     if (!user) return;
     try {
       await setDoc(
@@ -496,6 +511,7 @@ export default function App() {
         {
           platforms: newPlatforms || userPlatforms,
           templates: newTemplates || userTemplates,
+          notificationPrefs: newPrefs || userNotificationPrefs,
         },
         { merge: true }
       );
@@ -517,7 +533,7 @@ export default function App() {
     }
     const updated = [...userPlatforms, newPlat];
     setUserPlatforms(updated);
-    saveSettingsToDB(updated, null);
+    saveSettingsToDB(updated, null, null);
     setNewPlatformName("");
   };
 
@@ -525,7 +541,7 @@ export default function App() {
     if (confirm("¿Eliminar plataforma?")) {
       const updated = userPlatforms.filter((p) => p.id !== id);
       setUserPlatforms(updated);
-      saveSettingsToDB(updated, null);
+      saveSettingsToDB(updated, null, null);
     }
   };
 
@@ -543,19 +559,54 @@ export default function App() {
         : p
     );
     setUserPlatforms(updatedPlatforms);
-    saveSettingsToDB(updatedPlatforms, null);
+    saveSettingsToDB(updatedPlatforms, null, null);
     setEditingPlatform(null);
   };
 
   const handleUpdateTemplate = (key, value) => {
     const updated = { ...userTemplates, [key]: value };
     setUserTemplates(updated);
-    saveSettingsToDB(null, updated);
+    saveSettingsToDB(null, updated, null);
   };
 
   const insertIntoTemplate = (key, variable) => {
     const currentText = userTemplates[key] || "";
     handleUpdateTemplate(key, currentText + " " + variable);
+  };
+
+  const toggleNotificationPreference = (key) => {
+    const updated = {
+      ...userNotificationPrefs,
+      [key]: !userNotificationPrefs[key],
+    };
+    setUserNotificationPrefs(updated);
+    saveSettingsToDB(null, null, updated);
+  };
+
+  // --- NUEVA FUNCIÓN: DESCARGAR PLANTILLA ---
+  const handleDownloadTemplate = () => {
+    const headers = [
+      "STATUS",
+      "PLATAFORMA",
+      "ID",
+      "USUARIO",
+      "NOMBRE",
+      "EXPIRACION",
+      "INICIO",
+      "CONTACTO",
+      "CONEXIONES",
+      "CONTRATACIONES",
+    ];
+    const csvContent = headers.join(",");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "plantilla_importacion_proview.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const getTargetCollection = () => {
@@ -725,7 +776,6 @@ export default function App() {
       alert("Nada para exportar.");
       return;
     }
-    // Quitada columna contraseña
     const headers = [
       "STATUS",
       "PLATAFORMA",
@@ -833,9 +883,7 @@ export default function App() {
     setShowModal(true);
   };
 
-  const openDetailsModal = (client) => {
-    setViewDetailsClient(client);
-  };
+  const openDetailsModal = (client) => setViewDetailsClient(client);
   const closeDetailsModal = () => setViewDetailsClient(null);
   const closeModal = () => {
     setShowModal(false);
@@ -889,9 +937,12 @@ export default function App() {
     if (!clients.length) return [];
     return clients.filter((client) => {
       const days = getDaysRemaining(client.expiryDate);
-      return days === 15 || days === 1 || days === -15;
+      if (days === 15 && userNotificationPrefs.checkIn15Days) return true;
+      if (days === 1 && userNotificationPrefs.reminderTomorrow) return true;
+      if (days === -15 && userNotificationPrefs.recovery15Days) return true;
+      return false;
     });
-  }, [clients]);
+  }, [clients, userNotificationPrefs]);
 
   const activeNotificationsCount = pendingNotifications.filter(
     (n) => !completedTasks.includes(n.id)
@@ -993,12 +1044,23 @@ export default function App() {
 
               {!viewingAsUser && (
                 <>
+                  {/* Botón Descargar Plantilla (NUEVO) */}
+                  <button
+                    onClick={handleDownloadTemplate}
+                    className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600/50"
+                    title="Descargar Plantilla CSV"
+                  >
+                    <FileDown className="w-5 h-5" />
+                  </button>
+
                   <button
                     onClick={triggerFileUpload}
-                    className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600/50"
+                    className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-slate-600/50 shadow-sm whitespace-nowrap"
                   >
-                    <FileSpreadsheet className="w-5 h-5" />
+                    <FileSpreadsheet className="w-4 h-4" />{" "}
+                    <span className="hidden sm:inline">Importar</span>
                   </button>
+
                   <button
                     onClick={handleExportCSV}
                     className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600/50"
@@ -1310,6 +1372,18 @@ export default function App() {
                   <MessageSquare className="w-4 h-4" /> Mensajes
                 </div>
               </button>
+              <button
+                onClick={() => setSettingsTab("notifications")}
+                className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
+                  settingsTab === "notifications"
+                    ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <Bell className="w-4 h-4" /> Notificaciones
+                </div>
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {settingsTab === "platforms" ? (
@@ -1423,9 +1497,8 @@ export default function App() {
                     ))}
                   </div>
                 </div>
-              ) : (
+              ) : settingsTab === "messages" ? (
                 <div className="space-y-5">
-                  {/* Vence Mañana */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
                       <label className="text-sm font-bold text-yellow-400">
@@ -1446,7 +1519,6 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Check-In 15 Días Antes */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
                       <label className="text-sm font-bold text-blue-400 flex gap-2">
@@ -1466,7 +1538,6 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Recuperación 15 Días Después */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
                       <label className="text-sm font-bold text-purple-400 flex gap-2">
@@ -1486,7 +1557,6 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Bienvenida */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
                       <label className="text-sm font-bold text-emerald-400 flex gap-2">
@@ -1505,7 +1575,6 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Pago Confirmado */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
                       <label className="text-sm font-bold text-blue-400 flex gap-2">
@@ -1524,7 +1593,6 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Vencido */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
                       <label className="text-sm font-bold text-rose-400">
@@ -1541,6 +1609,100 @@ export default function App() {
                         handleUpdateTemplate("expired", e.target.value)
                       }
                     />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {/* TAB NOTIFICACIONES */}
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                        <HelpCircle className="w-4 h-4 text-blue-400" />{" "}
+                        Seguimiento Preventivo
+                      </h4>
+                      <p className="text-slate-400 text-xs mt-1">
+                        Avisar 15 días antes del vencimiento para chequear
+                        calidad.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        toggleNotificationPreference("checkIn15Days")
+                      }
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        userNotificationPrefs.checkIn15Days
+                          ? "bg-blue-600"
+                          : "bg-slate-700"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          userNotificationPrefs.checkIn15Days
+                            ? "translate-x-6"
+                            : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-yellow-400" />{" "}
+                        Alerta de Urgencia
+                      </h4>
+                      <p className="text-slate-400 text-xs mt-1">
+                        Avisar 1 día antes del vencimiento (Mañana).
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        toggleNotificationPreference("reminderTomorrow")
+                      }
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        userNotificationPrefs.reminderTomorrow
+                          ? "bg-blue-600"
+                          : "bg-slate-700"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          userNotificationPrefs.reminderTomorrow
+                            ? "translate-x-6"
+                            : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                        <HeartHandshake className="w-4 h-4 text-purple-400" />{" "}
+                        Recuperación de Clientes
+                      </h4>
+                      <p className="text-slate-400 text-xs mt-1">
+                        Intentar recuperar al cliente 15 días después de vencer.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        toggleNotificationPreference("recovery15Days")
+                      }
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        userNotificationPrefs.recovery15Days
+                          ? "bg-blue-600"
+                          : "bg-slate-700"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          userNotificationPrefs.recovery15Days
+                            ? "translate-x-6"
+                            : "translate-x-1"
+                        }`}
+                      />
+                    </button>
                   </div>
                 </div>
               )}
@@ -1629,6 +1791,12 @@ export default function App() {
                   <p className="text-white text-lg">
                     {viewDetailsClient.username}
                   </p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase font-bold">
+                    Contraseña
+                  </p>
+                  <p className="text-white text-lg">••••••</p>
                 </div>
                 <div>
                   <p className="text-slate-500 text-xs uppercase font-bold">
@@ -1885,7 +2053,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">
-                    CONTACTO
+                    CONTACTO (WhatsApp)
                   </label>
                   <input
                     type="text"
