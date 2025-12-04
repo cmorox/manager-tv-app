@@ -35,7 +35,9 @@ import {
   MessageSquare,
   CheckSquare,
   Square,
-  Shield, // Icono de Admin agregado
+  Shield,
+  CreditCard, // Icono para pago
+  PartyPopper, // Icono para bienvenida
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -65,7 +67,6 @@ import {
 // CONFIGURACIÓN DE FIREBASE
 // ------------------------------------------------------------------
 
-// TU CORREO DE ADMINISTRADOR
 const ADMIN_EMAIL = "cristianmoro482@gmail.com";
 
 const firebaseConfig = {
@@ -80,7 +81,6 @@ const firebaseConfig = {
 
 const APP_ID_NEGOCIO = "control-proviewtv";
 
-// Inicialización de la App
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -111,6 +111,11 @@ const DEFAULT_TEMPLATES = {
     "Hola {nombre}, recordatorio: tu cuenta de {plataforma} vence pronto ({fecha}). ¿Deseas renovar?",
   active:
     "Hola {nombre}, aquí tienes los datos de tu cuenta {plataforma}:\nUsuario: {usuario}",
+  // NUEVAS PLANTILLAS
+  welcome:
+    "¡Hola {nombre}! Bienvenido a {plataforma}. 🌟\nTus datos de acceso son:\nUsuario: {usuario}\nExpiración: {fecha}\n¡Que lo disfrutes!",
+  paymentReceived:
+    "¡Gracias por tu pago {nombre}! 💸\nTu servicio de {plataforma} ha sido renovado correctamente.\nNueva fecha de vencimiento: {fecha}. ✅",
 };
 
 const AVAILABLE_COLORS = [
@@ -169,7 +174,6 @@ const parseCSVDate = (dateStr) => {
   return new Date().toISOString().split("T")[0];
 };
 
-// Componente Barra de Variables
 const VariableToolbar = ({ onInsert }) => (
   <div className="flex flex-wrap gap-2 mb-2">
     <button
@@ -217,7 +221,6 @@ function LoginScreen() {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
       if (isRegistering) {
         await createUserWithEmailAndPassword(auth, email, password);
@@ -244,7 +247,6 @@ function LoginScreen() {
           </h1>
           <p className="text-slate-400 text-sm mt-1">Plataforma de Gestión</p>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">
@@ -289,7 +291,6 @@ function LoginScreen() {
               : "Iniciar Sesión"}
           </button>
         </form>
-
         <div className="mt-8 text-center pt-6 border-t border-slate-800">
           <button
             onClick={() => {
@@ -313,14 +314,11 @@ export default function App() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // --- ADMIN STATES (NUEVO) ---
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
-  const [viewingAsUser, setViewingAsUser] = useState(null); // ID del usuario a espiar
-  // ----------------------------
+  const [viewingAsUser, setViewingAsUser] = useState(null);
 
-  // Config States
   const [userPlatforms, setUserPlatforms] = useState(DEFAULT_PLATFORMS);
   const [userTemplates, setUserTemplates] = useState(DEFAULT_TEMPLATES);
   const [showSettings, setShowSettings] = useState(false);
@@ -331,7 +329,6 @@ export default function App() {
   );
   const [editingPlatform, setEditingPlatform] = useState(null);
 
-  // UI States
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [viewDetailsClient, setViewDetailsClient] = useState(null);
@@ -361,7 +358,6 @@ export default function App() {
     renewals: 1,
   });
 
-  // 1. Auth Listener (Con chequeo de Admin)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -375,7 +371,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Registro en Directorio de Usuarios (Para que el admin los vea)
   useEffect(() => {
     if (user) {
       const registerUser = async () => {
@@ -396,13 +391,10 @@ export default function App() {
     }
   }, [user]);
 
-  // 3. Carga de Configuración
   useEffect(() => {
     if (!user) return;
     const fetchSettings = async () => {
       try {
-        // Si estamos viendo como otro usuario, podríamos cargar SUS plataformas,
-        // pero para simplificar usamos las del usuario logueado (tú) o defaults.
         const docRef = doc(
           db,
           "artifacts",
@@ -428,20 +420,16 @@ export default function App() {
     fetchSettings();
   }, [user]);
 
-  // 4. Carga de Clientes (Soporta "Ver Como")
   useEffect(() => {
     if (!user) {
       setClients([]);
       return;
     }
     setLoading(true);
-
-    // Si viewingAsUser existe, usamos su ID. Si no, usamos el propio.
     const targetUid = viewingAsUser ? viewingAsUser.id : user.uid;
     const q = query(
       collection(db, "artifacts", appId, "users", targetUid, "clients")
     );
-
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
@@ -460,7 +448,6 @@ export default function App() {
     return () => unsubscribe();
   }, [user, viewingAsUser]);
 
-  // 5. Cargar lista de usuarios (Solo Admin)
   useEffect(() => {
     if (isAdmin && showAdminPanel) {
       const fetchAllUsers = async () => {
@@ -478,7 +465,6 @@ export default function App() {
     }
   }, [isAdmin, showAdminPanel]);
 
-  // --- FUNCIONES ---
   const handleLogout = async () => {
     await signOut(auth);
   };
@@ -553,7 +539,6 @@ export default function App() {
     handleUpdateTemplate(key, currentText + " " + variable);
   };
 
-  // Helper para obtener la colección correcta (Propia o de otro usuario)
   const getTargetCollection = () => {
     const targetUid = viewingAsUser ? viewingAsUser.id : user.uid;
     return collection(db, "artifacts", appId, "users", targetUid, "clients");
@@ -581,7 +566,6 @@ export default function App() {
   const handleDelete = async (id) => {
     if (!confirm("¿Eliminar cliente?")) return;
     try {
-      // Borramos en la colección objetivo (sea propia o de otro usuario)
       const targetUid = viewingAsUser ? viewingAsUser.id : user.uid;
       await deleteDoc(
         doc(db, "artifacts", appId, "users", targetUid, "clients", id)
@@ -696,6 +680,10 @@ export default function App() {
       message = processTemplate(userTemplates.reminderTomorrow);
     else if (type === "recovery15Days")
       message = processTemplate(userTemplates.recovery15Days);
+    else if (type === "welcome")
+      message = processTemplate(userTemplates.welcome);
+    else if (type === "paymentReceived")
+      message = processTemplate(userTemplates.paymentReceived);
     else {
       if (days < 0) message = processTemplate(userTemplates.expired);
       else if (days <= 5) message = processTemplate(userTemplates.expiringSoon);
@@ -783,7 +771,6 @@ export default function App() {
       }
       if (newClients.length > 0 && confirm(`¿Importar ${newClients.length}?`)) {
         const batch = writeBatch(db);
-        // Usa la colección objetivo (importa a la cuenta que estás viendo)
         const collectionRef = getTargetCollection();
         newClients
           .slice(0, 490)
@@ -1450,6 +1437,42 @@ export default function App() {
                       }
                     />
                   </div>
+
+                  {/* NUEVOS TEMPLATES */}
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                    <div className="mb-2">
+                      <label className="text-sm font-bold text-emerald-400 flex gap-2">
+                        <PartyPopper className="w-4 h-4" /> Bienvenida
+                      </label>
+                    </div>
+                    <VariableToolbar
+                      onInsert={(v) => insertIntoTemplate("welcome", v)}
+                    />
+                    <textarea
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-emerald-500 outline-none min-h-[80px]"
+                      value={userTemplates.welcome}
+                      onChange={(e) =>
+                        handleUpdateTemplate("welcome", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                    <div className="mb-2">
+                      <label className="text-sm font-bold text-blue-400 flex gap-2">
+                        <CreditCard className="w-4 h-4" /> Pago Recibido
+                      </label>
+                    </div>
+                    <VariableToolbar
+                      onInsert={(v) => insertIntoTemplate("paymentReceived", v)}
+                    />
+                    <textarea
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-blue-500 outline-none min-h-[80px]"
+                      value={userTemplates.paymentReceived}
+                      onChange={(e) =>
+                        handleUpdateTemplate("paymentReceived", e.target.value)
+                      }
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -1567,6 +1590,32 @@ export default function App() {
                   </p>
                 </div>
               </div>
+
+              {/* SECCIÓN DE MENSAJES RÁPIDOS (NUEVA) */}
+              {viewDetailsClient.contact && (
+                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                  <p className="text-xs font-bold text-slate-500 uppercase mb-2">
+                    Mensajes Rápidos
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openWhatsApp(viewDetailsClient, "welcome")}
+                      className="flex-1 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 rounded text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                    >
+                      <PartyPopper className="w-3 h-3" /> Bienvenida
+                    </button>
+                    <button
+                      onClick={() =>
+                        openWhatsApp(viewDetailsClient, "paymentReceived")
+                      }
+                      className="flex-1 py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                    >
+                      <CreditCard className="w-3 h-3" /> Confirmar Pago
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-4 border-t border-slate-800">
                 <button
                   onClick={() => {
