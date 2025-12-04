@@ -2244,10 +2244,9 @@ export default function App() {
                 const days = getDaysRemaining(c.expiryDate);
 
                 // Determinar tipo de alerta dinámico
-                let type = "reminderTomorrow";
-                let label = "Vence Mañana";
-                let style =
-                  "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
+                let type = "default"; // CORREGIDO: Default para que use la lógica automática de openWhatsApp
+                let label = "";
+                let style = "";
                 let Icon = AlertCircle;
 
                 if (days === 15) {
@@ -2261,18 +2260,24 @@ export default function App() {
                   style =
                     "bg-purple-500/10 text-purple-400 border-purple-500/20";
                   Icon = HeartHandshake;
-                } else if (days <= 0) {
-                  // Lógica para vencidos HOY o ANTES
-                  if (days === 0) {
-                    label = "Vence HOY";
-                    style =
-                      "bg-orange-500/10 text-orange-400 border-orange-500/20 animate-pulse";
-                  } else {
-                    label = "VENCIDO";
-                    style =
-                      "bg-rose-500/10 text-rose-400 border-rose-500/20 font-bold";
-                    Icon = AlertTriangle; // Icono de alarma para vencidos
-                  }
+                } else if (days === 1) {
+                  type = "reminderTomorrow"; // Solo explícito si falta 1 día
+                  label = "Vence Mañana";
+                  style =
+                    "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
+                  Icon = AlertCircle;
+                } else if (days === 0) {
+                  type = "default"; // Dejar que openWhatsApp detecte <= 5 días
+                  label = "Vence HOY";
+                  style =
+                    "bg-orange-500/10 text-orange-400 border-orange-500/20 animate-pulse";
+                  Icon = AlertCircle;
+                } else if (days < 0) {
+                  type = "default"; // Dejar que openWhatsApp detecte < 0 días (expired)
+                  label = "VENCIDO";
+                  style =
+                    "bg-rose-500/10 text-rose-400 border-rose-500/20 font-bold";
+                  Icon = AlertTriangle;
                 }
 
                 const isCompleted = completedTasks.includes(c.id);
