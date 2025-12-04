@@ -185,6 +185,19 @@ const parseCSVDate = (dateStr) => {
   return new Date().toISOString().split("T")[0];
 };
 
+// --- ESTILOS GLOBALES (Para ocultar scrollbar) ---
+const GlobalStyles = () => (
+  <style>{`
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+  `}</style>
+);
+
 // --- COMPONENTE BOTÓN CON TOOLTIP ---
 const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
   <div className="relative group">
@@ -194,13 +207,13 @@ const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
     >
       {icon}
       {badge > 0 && (
-        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm border-2 border-slate-900">
+        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm border-2 border-slate-900 animate-bounce">
           {badge}
         </span>
       )}
     </button>
-    {/* Tooltip */}
-    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-slate-900 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 border border-slate-700 shadow-xl">
+    {/* Tooltip Mejorado */}
+    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 px-3 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 border border-slate-700 shadow-xl">
       {label}
       <div className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-slate-900"></div>
     </div>
@@ -825,6 +838,7 @@ export default function App() {
       alert("Nada para exportar.");
       return;
     }
+    // Quitada columna contraseña
     const headers = [
       "STATUS",
       "PLATAFORMA",
@@ -932,7 +946,9 @@ export default function App() {
     setShowModal(true);
   };
 
-  const openDetailsModal = (client) => setViewDetailsClient(client);
+  const openDetailsModal = (client) => {
+    setViewDetailsClient(client);
+  };
   const closeDetailsModal = () => setViewDetailsClient(null);
   const closeModal = () => {
     setShowModal(false);
@@ -1007,6 +1023,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-gray-100 pb-20 transition-colors duration-300">
+      <GlobalStyles />
       <input
         type="file"
         accept=".csv"
@@ -1056,7 +1073,7 @@ export default function App() {
               />
             </div>
 
-            <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 items-center">
+            <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 items-center scrollbar-hide">
               {isAdmin && !viewingAsUser && (
                 <NavButton
                   onClick={() => setShowAdminPanel(true)}
@@ -1196,7 +1213,7 @@ export default function App() {
             </span>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scrollbar-hide">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-900/50 text-slate-400 font-medium uppercase text-xs tracking-wider">
                 <tr>
