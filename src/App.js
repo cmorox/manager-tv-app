@@ -17,6 +17,7 @@ import {
   Tv,
   Wifi,
   Eye,
+  EyeOff, // Se mantiene para el Login
   X,
   Calendar,
   Phone,
@@ -36,8 +37,10 @@ import {
   CheckSquare,
   Square,
   Shield,
-  HeartHandshake, // Icono para recuperación
-  HelpCircle, // Icono para seguimiento
+  HeartHandshake,
+  HelpCircle,
+  CreditCard,
+  PartyPopper,
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -101,21 +104,22 @@ const DEFAULT_PLATFORMS = [
 ];
 
 const DEFAULT_TEMPLATES = {
-  // AUTOMÁTICOS (Tabla)
   expired:
     "Hola {nombre}, tu servicio de {plataforma} venció el {fecha}. ¿Te gustaría reactivarlo?",
   expiringSoon:
     "Hola {nombre}, recordatorio: tu cuenta de {plataforma} vence pronto ({fecha}). ¿Deseas renovar?",
   active:
     "Hola {nombre}, aquí tienes los datos de tu cuenta {plataforma}:\nUsuario: {usuario}",
-
-  // ESPECÍFICOS (Notificaciones)
   reminderTomorrow:
     "Hola {nombre}, tu servicio de {plataforma} vence MAÑANA ({fecha}). ¿Deseas renovar para no perder la señal? 📺",
   checkIn15Days:
     "Hola {nombre}, faltan 15 días para que venza tu {plataforma}. ¿Todo va bien con el servicio? Queremos asegurarnos de que lo disfrutas. 🛠️",
   recoveryLost:
     "Hola {nombre}, te extrañamos. Han pasado días desde que venció tu {plataforma}. ¿Te gustaría regresar con una promo especial? 🎁",
+  welcome:
+    "¡Hola {nombre}! Bienvenido a {plataforma}. 🌟\nTus datos de acceso son:\nUsuario: {usuario}\nExpiración: {fecha}\n¡Que lo disfrutes!",
+  paymentReceived:
+    "¡Gracias por tu pago {nombre}! 💸\nTu servicio de {plataforma} ha sido renovado correctamente.\nNueva fecha de vencimiento: {fecha}. ✅",
 };
 
 const AVAILABLE_COLORS = [
@@ -214,6 +218,7 @@ function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -265,14 +270,27 @@ function LoginScreen() {
             <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">
               Contraseña
             </label>
-            <input
-              type="password"
-              required
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-blue-500 outline-none"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-4 pr-10 text-white focus:border-blue-500 outline-none"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-slate-500 hover:text-slate-300"
+              >
+                {showPassword ? (
+                  <EyeOff className="w-5 h-5" />
+                ) : (
+                  <Eye className="w-5 h-5" />
+                )}
+              </button>
+            </div>
           </div>
           {error && (
             <div className="text-rose-400 text-sm p-2 bg-rose-500/10 rounded">
@@ -358,19 +376,18 @@ export default function App() {
     renewals: 1,
   });
 
+  // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthChecking(false);
-      if (currentUser && currentUser.email === ADMIN_EMAIL) {
-        setIsAdmin(true);
-      } else {
-        setIsAdmin(false);
-      }
+      if (currentUser && currentUser.email === ADMIN_EMAIL) setIsAdmin(true);
+      else setIsAdmin(false);
     });
     return () => unsubscribe();
   }, []);
 
+  // Registro Usuario
   useEffect(() => {
     if (user) {
       const registerUser = async () => {
@@ -391,6 +408,7 @@ export default function App() {
     }
   }, [user]);
 
+  // Carga Config
   useEffect(() => {
     if (!user) return;
     const fetchSettings = async () => {
@@ -420,6 +438,7 @@ export default function App() {
     fetchSettings();
   }, [user]);
 
+  // Carga Clientes
   useEffect(() => {
     if (!user) {
       setClients([]);
@@ -682,6 +701,10 @@ export default function App() {
       message = processTemplate(userTemplates.checkIn15Days);
     else if (type === "recoveryLost")
       message = processTemplate(userTemplates.recoveryLost);
+    else if (type === "welcome")
+      message = processTemplate(userTemplates.welcome);
+    else if (type === "paymentReceived")
+      message = processTemplate(userTemplates.paymentReceived);
     else {
       if (days < 0) message = processTemplate(userTemplates.expired);
       else if (days <= 5) message = processTemplate(userTemplates.expiringSoon);
@@ -702,6 +725,7 @@ export default function App() {
       alert("Nada para exportar.");
       return;
     }
+    // Quitada columna contraseña
     const headers = [
       "STATUS",
       "PLATAFORMA",
@@ -809,7 +833,9 @@ export default function App() {
     setShowModal(true);
   };
 
-  const openDetailsModal = (client) => setViewDetailsClient(client);
+  const openDetailsModal = (client) => {
+    setViewDetailsClient(client);
+  };
   const closeDetailsModal = () => setViewDetailsClient(null);
   const closeModal = () => {
     setShowModal(false);
@@ -863,7 +889,6 @@ export default function App() {
     if (!clients.length) return [];
     return clients.filter((client) => {
       const days = getDaysRemaining(client.expiryDate);
-      // Días clave: 15 días antes (15), 1 día antes (1), 15 días después (-15)
       return days === 15 || days === 1 || days === -15;
     });
   }, [clients]);
@@ -1461,6 +1486,44 @@ export default function App() {
                     />
                   </div>
 
+                  {/* Bienvenida */}
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                    <div className="mb-2">
+                      <label className="text-sm font-bold text-emerald-400 flex gap-2">
+                        <PartyPopper className="w-4 h-4" /> Bienvenida
+                      </label>
+                    </div>
+                    <VariableToolbar
+                      onInsert={(v) => insertIntoTemplate("welcome", v)}
+                    />
+                    <textarea
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-emerald-500 outline-none min-h-[80px]"
+                      value={userTemplates.welcome}
+                      onChange={(e) =>
+                        handleUpdateTemplate("welcome", e.target.value)
+                      }
+                    />
+                  </div>
+
+                  {/* Pago Confirmado */}
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                    <div className="mb-2">
+                      <label className="text-sm font-bold text-blue-400 flex gap-2">
+                        <CreditCard className="w-4 h-4" /> Pago Confirmado
+                      </label>
+                    </div>
+                    <VariableToolbar
+                      onInsert={(v) => insertIntoTemplate("paymentReceived", v)}
+                    />
+                    <textarea
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-blue-500 outline-none min-h-[80px]"
+                      value={userTemplates.paymentReceived}
+                      onChange={(e) =>
+                        handleUpdateTemplate("paymentReceived", e.target.value)
+                      }
+                    />
+                  </div>
+
                   {/* Vencido */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
@@ -1569,12 +1632,6 @@ export default function App() {
                 </div>
                 <div>
                   <p className="text-slate-500 text-xs uppercase font-bold">
-                    Contraseña
-                  </p>
-                  <p className="text-white text-lg">••••••</p>
-                </div>
-                <div>
-                  <p className="text-slate-500 text-xs uppercase font-bold">
                     Expiración
                   </p>
                   <p
@@ -1596,6 +1653,31 @@ export default function App() {
                   </p>
                 </div>
               </div>
+
+              {/* SECCIÓN MENSAJES RÁPIDOS */}
+              {viewDetailsClient.contact && (
+                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                  <p className="text-xs font-bold text-slate-500 uppercase mb-2">
+                    Mensajes Rápidos
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openWhatsApp(viewDetailsClient, "welcome")}
+                      className="flex-1 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 rounded text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                    >
+                      <PartyPopper className="w-3 h-3" /> Bienvenida
+                    </button>
+                    <button
+                      onClick={() =>
+                        openWhatsApp(viewDetailsClient, "paymentReceived")
+                      }
+                      className="flex-1 py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                    >
+                      <CreditCard className="w-3 h-3" /> Confirmar Pago
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4 border-t border-slate-800">
                 <button
