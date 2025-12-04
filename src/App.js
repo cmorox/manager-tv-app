@@ -42,6 +42,7 @@ import {
   CreditCard,
   PartyPopper,
   FileDown,
+  Repeat, // Icono para renovaciones
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -117,10 +118,6 @@ const DEFAULT_TEMPLATES = {
     "Hola {nombre}, faltan 15 días para que venza tu {plataforma}. ¿Todo va bien con el servicio? Queremos asegurarnos de que lo disfrutas. 🛠️",
   recoveryLost:
     "Hola {nombre}, te extrañamos. Han pasado días desde que venció tu {plataforma}. ¿Te gustaría regresar con una promo especial? 🎁",
-  welcome:
-    "¡Hola {nombre}! Bienvenido a {plataforma}. 🌟\nTus datos de acceso son:\nUsuario: {usuario}\nExpiración: {fecha}\n¡Que lo disfrutes!",
-  paymentReceived:
-    "¡Gracias por tu pago {nombre}! 💸\nTu servicio de {plataforma} ha sido renovado correctamente.\nNueva fecha de vencimiento: {fecha}. ✅",
 };
 
 const DEFAULT_NOTIFICATION_PREFS = {
@@ -185,20 +182,15 @@ const parseCSVDate = (dateStr) => {
   return new Date().toISOString().split("T")[0];
 };
 
-// --- ESTILOS GLOBALES (Para ocultar scrollbar) ---
+// --- ESTILOS GLOBALES ---
 const GlobalStyles = () => (
   <style>{`
-    .scrollbar-hide::-webkit-scrollbar {
-        display: none;
-    }
-    .scrollbar-hide {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-    }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
   `}</style>
 );
 
-// --- COMPONENTE BOTÓN CON TOOLTIP ---
+// --- COMPONENTE BOTÓN CON TOOLTIP (Para botones solo icono) ---
 const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
   <div className="relative group flex items-center">
     <button
@@ -212,13 +204,22 @@ const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
         </span>
       )}
     </button>
-    {/* Tooltip Mejorado - Posicionado abajo y con z-index alto */}
     <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-black/90 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[999] border border-slate-700 shadow-xl backdrop-blur-sm">
       {label}
-      {/* Flechita del tooltip */}
       <div className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-black/90"></div>
     </div>
   </div>
+);
+
+// --- COMPONENTE BOTÓN CON TEXTO (Para botones descriptivos) ---
+const TextNavButton = ({ onClick, icon, label, colorClass }) => (
+  <button
+    onClick={onClick}
+    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 border border-white/5 font-medium text-xs sm:text-sm whitespace-nowrap ${colorClass}`}
+  >
+    {icon}
+    <span>{label}</span>
+  </button>
 );
 
 const VariableToolbar = ({ onInsert }) => (
@@ -425,6 +426,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [viewDetailsClient, setViewDetailsClient] = useState(null);
+  const [showClientPassword, setShowClientPassword] = useState(false); // FIXED: Only one declaration
   const [editingClient, setEditingClient] = useState(null);
   const [renewingClient, setRenewingClient] = useState(null);
   const [renewalData, setRenewalData] = useState({
@@ -443,6 +445,7 @@ export default function App() {
     platform: "LOTV",
     customId: "",
     username: "",
+    password: "",
     name: "",
     contact: "",
     connections: 1,
@@ -462,7 +465,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Registro Usuario
+  // Registro
   useEffect(() => {
     if (user) {
       const registerUser = async () => {
@@ -483,7 +486,7 @@ export default function App() {
     }
   }, [user]);
 
-  // Carga Config
+  // Config
   useEffect(() => {
     if (!user) return;
     const fetchSettings = async () => {
@@ -516,7 +519,7 @@ export default function App() {
     fetchSettings();
   }, [user]);
 
-  // Carga Clientes
+  // Clientes
   useEffect(() => {
     if (!user) {
       setClients([]);
@@ -562,7 +565,7 @@ export default function App() {
     }
   }, [isAdmin, showAdminPanel]);
 
-  // --- FUNCIONES ---
+  // Funciones
   const handleLogout = async () => {
     await signOut(auth);
   };
@@ -815,10 +818,6 @@ export default function App() {
       message = processTemplate(userTemplates.checkIn15Days);
     else if (type === "recoveryLost")
       message = processTemplate(userTemplates.recoveryLost);
-    else if (type === "welcome")
-      message = processTemplate(userTemplates.welcome);
-    else if (type === "paymentReceived")
-      message = processTemplate(userTemplates.paymentReceived);
     else {
       if (days < 0) message = processTemplate(userTemplates.expired);
       else if (days <= 5) message = processTemplate(userTemplates.expiringSoon);
@@ -901,6 +900,7 @@ export default function App() {
             contact: cols[7]?.replace(/"/g, "").trim() || "",
             connections: parseInt(cols[8]?.replace(/"/g, "")) || 1,
             renewals: parseInt(cols[9]?.replace(/"/g, "")) || 1,
+            password: cols[10]?.replace(/"/g, "").trim() || "",
             createdAt: serverTimestamp(),
           });
         }
@@ -923,7 +923,7 @@ export default function App() {
   const openModal = (client = null) => {
     if (client) {
       setEditingClient(client);
-      setFormData({ ...client });
+      setFormData({ ...client, password: client.password || "" });
     } else {
       setEditingClient(null);
       const today = new Date();
@@ -936,6 +936,7 @@ export default function App() {
         platform: defaultPlatform,
         customId: "",
         username: "",
+        password: "",
         name: "",
         contact: "",
         connections: 1,
@@ -947,7 +948,10 @@ export default function App() {
     setShowModal(true);
   };
 
-  const openDetailsModal = (client) => setViewDetailsClient(client);
+  const openDetailsModal = (client) => {
+    setViewDetailsClient(client);
+    setShowClientPassword(false);
+  };
   const closeDetailsModal = () => setViewDetailsClient(null);
   const closeModal = () => {
     setShowModal(false);
@@ -1060,90 +1064,78 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Buscar..."
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 focus:border-blue-500 text-slate-200 text-sm outline-none"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+          {/* Top Right Controls (Only System buttons) */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
+            {isAdmin && !viewingAsUser && (
+              <NavButton
+                onClick={() => setShowAdminPanel(true)}
+                icon={<Shield className="w-5 h-5 text-amber-500" />}
+                label="Admin Panel"
+                colorClass="bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20"
               />
-            </div>
+            )}
+            {viewingAsUser && (
+              <button
+                onClick={() => setViewingAsUser(null)}
+                className="flex-1 sm:flex-none bg-rose-600 hover:bg-rose-500 text-white px-3 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold shadow-md"
+              >
+                <LogOut className="w-4 h-4" /> Salir de {viewingAsUser.email}
+              </button>
+            )}
 
-            <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 items-center scrollbar-hide">
-              {isAdmin && !viewingAsUser && (
-                <NavButton
-                  onClick={() => setShowAdminPanel(true)}
-                  icon={<Shield className="w-5 h-5 text-amber-500" />}
-                  label="Admin Panel"
-                  colorClass="bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20"
+            <NavButton
+              onClick={() => setShowNotifications(true)}
+              icon={<Bell className="w-5 h-5 text-white" />}
+              label="Notificaciones"
+              colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+              badge={activeNotificationsCount}
+            />
+
+            <div className="w-px h-6 bg-slate-700 mx-1 hidden sm:block"></div>
+
+            {!viewingAsUser && (
+              <>
+                <TextNavButton
+                  onClick={handleDownloadTemplate}
+                  icon={<FileDown className="w-4 h-4 text-emerald-400" />}
+                  label="Bajar Plantilla"
+                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
                 />
-              )}
-              {viewingAsUser && (
-                <button
-                  onClick={() => setViewingAsUser(null)}
-                  className="flex-1 sm:flex-none bg-rose-600 hover:bg-rose-500 text-white px-3 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-bold"
-                >
-                  <LogOut className="w-4 h-4" /> Salir de {viewingAsUser.email}
-                </button>
-              )}
+                <TextNavButton
+                  onClick={triggerFileUpload}
+                  icon={
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                  }
+                  label="Importar"
+                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
+                />
+                <TextNavButton
+                  onClick={handleExportCSV}
+                  icon={<Download className="w-4 h-4 text-blue-400" />}
+                  label="Exportar"
+                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
+                />
+                <NavButton
+                  onClick={() => setShowSettings(true)}
+                  icon={<Settings className="w-5 h-5 text-slate-400" />}
+                  label="Configuración"
+                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                />
+                <NavButton
+                  onClick={handleDeleteAll}
+                  icon={<Trash2 className="w-5 h-5 text-rose-400" />}
+                  label="Borrar Todo"
+                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                />
+              </>
+            )}
 
-              <NavButton
-                onClick={() => setShowNotifications(true)}
-                icon={<Bell className="w-5 h-5 text-white" />}
-                label="Notificaciones"
-                colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-                badge={activeNotificationsCount}
-              />
-
-              <div className="w-px h-6 bg-slate-700 mx-1 hidden sm:block"></div>
-
-              {!viewingAsUser && (
-                <>
-                  <NavButton
-                    onClick={handleDownloadTemplate}
-                    icon={<FileDown className="w-5 h-5 text-emerald-400" />}
-                    label="Bajar Plantilla"
-                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-                  />
-                  <NavButton
-                    onClick={triggerFileUpload}
-                    icon={
-                      <FileSpreadsheet className="w-5 h-5 text-emerald-500" />
-                    }
-                    label="Importar CSV"
-                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-                  />
-                  <NavButton
-                    onClick={handleExportCSV}
-                    icon={<Download className="w-5 h-5 text-blue-400" />}
-                    label="Exportar CSV"
-                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-                  />
-                  <NavButton
-                    onClick={() => setShowSettings(true)}
-                    icon={<Settings className="w-5 h-5 text-slate-400" />}
-                    label="Configuración"
-                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-                  />
-                  <NavButton
-                    onClick={() => openModal()}
-                    icon={<Plus className="w-5 h-5 text-white" />}
-                    label="Nuevo Cliente"
-                    colorClass="bg-blue-600 hover:bg-blue-500 border-blue-500"
-                  />
-                </>
-              )}
-
-              <NavButton
-                onClick={handleLogout}
-                icon={<LogOut className="w-5 h-5 text-rose-400" />}
-                label="Cerrar Sesión"
-                colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-              />
-            </div>
+            <NavButton
+              onClick={handleLogout}
+              icon={<LogOut className="w-5 h-5 text-rose-400" />}
+              label="Cerrar Sesión"
+              colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+            />
           </div>
         </div>
       </div>
@@ -1186,11 +1178,36 @@ export default function App() {
         </div>
 
         <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700/50 overflow-hidden">
-          {/* Header Tabla */}
-          <div className="p-4 border-b border-slate-700 bg-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3">
-            <div className="flex items-center gap-3">
+          {/* Header Tabla (Lower Bar) - Now contains Search and Add */}
+          <div className="p-4 border-b border-slate-700 bg-slate-800 flex flex-col lg:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-3 flex-1 w-full lg:w-auto">
+              {/* Search moved here */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar cliente..."
+                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 focus:border-blue-500 text-slate-200 text-sm outline-none transition-all focus:ring-1 focus:ring-blue-500"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {/* Add Button moved here */}
+              {!viewingAsUser && (
+                <button
+                  onClick={() => openModal()}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-blue-900/20 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" /> Agregar cliente
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4 w-full lg:w-auto justify-between lg:justify-end">
               <div className="flex items-center gap-2 text-slate-300 font-semibold text-sm">
-                <Filter className="w-4 h-4" /> <span>Ordenar por:</span>
+                <Filter className="w-4 h-4" />{" "}
+                <span className="hidden sm:inline">Ordenar:</span>
               </div>
               <div className="relative">
                 <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -1199,17 +1216,17 @@ export default function App() {
                 <select
                   value={sortOption}
                   onChange={(e) => setSortOption(e.target.value)}
-                  className="pl-8 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-600 text-slate-200 text-xs font-medium focus:border-blue-500 outline-none"
+                  className="pl-8 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-600 text-slate-200 text-xs font-medium focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-700 transition-colors"
                 >
                   <option value="expiryDate">Expiración</option>
                   <option value="name">Nombre</option>
                   <option value="platform">Plataforma</option>
                 </select>
               </div>
+              <span className="text-xs font-medium text-slate-400 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700">
+                {loading ? "..." : `${filteredClients.length} regs`}
+              </span>
             </div>
-            <span className="text-xs font-medium text-slate-400 bg-slate-900 px-2 py-1 rounded-md border border-slate-700">
-              {loading ? "Cargando..." : `${filteredClients.length} registros`}
-            </span>
           </div>
 
           <div className="overflow-x-auto scrollbar-hide">
@@ -1615,42 +1632,6 @@ export default function App() {
 
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
-                      <label className="text-sm font-bold text-emerald-400 flex gap-2">
-                        <PartyPopper className="w-4 h-4" /> Bienvenida
-                      </label>
-                    </div>
-                    <VariableToolbar
-                      onInsert={(v) => insertIntoTemplate("welcome", v)}
-                    />
-                    <textarea
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-emerald-500 outline-none min-h-[80px]"
-                      value={userTemplates.welcome}
-                      onChange={(e) =>
-                        handleUpdateTemplate("welcome", e.target.value)
-                      }
-                    />
-                  </div>
-
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                    <div className="mb-2">
-                      <label className="text-sm font-bold text-blue-400 flex gap-2">
-                        <CreditCard className="w-4 h-4" /> Pago Confirmado
-                      </label>
-                    </div>
-                    <VariableToolbar
-                      onInsert={(v) => insertIntoTemplate("paymentReceived", v)}
-                    />
-                    <textarea
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-blue-500 outline-none min-h-[80px]"
-                      value={userTemplates.paymentReceived}
-                      onChange={(e) =>
-                        handleUpdateTemplate("paymentReceived", e.target.value)
-                      }
-                    />
-                  </div>
-
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                    <div className="mb-2">
                       <label className="text-sm font-bold text-rose-400">
                         Vencido
                       </label>
@@ -1826,107 +1807,194 @@ export default function App() {
       {/* Detalles */}
       {viewDetailsClient && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden">
-            <div className="p-6 border-b border-slate-800 flex justify-between items-start bg-gradient-to-r from-blue-900 to-slate-900">
-              <div>
-                <h2 className="text-2xl font-bold text-white">
-                  {viewDetailsClient.name}
-                </h2>
-                <p className="text-blue-200">{viewDetailsClient.platform}</p>
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${
+                    userPlatforms.find(
+                      (p) => p.id === viewDetailsClient.platform
+                    )?.color || "bg-slate-700"
+                  }`}
+                >
+                  <Monitor className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white tracking-tight">
+                    {viewDetailsClient.name}
+                  </h2>
+                  <div className="flex items-center gap-2 text-slate-400 text-sm">
+                    <span className="uppercase font-bold tracking-wider">
+                      {viewDetailsClient.platform}
+                    </span>
+                    <span className="w-1 h-1 bg-slate-500 rounded-full"></span>
+                    <span className="font-mono">
+                      {viewDetailsClient.customId || "SIN ID"}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <button onClick={closeDetailsModal}>
-                <X className="w-6 h-6 text-white/70 hover:text-white" />
+              <button
+                onClick={closeDetailsModal}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white p-2 rounded-xl transition-colors"
+              >
+                <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-slate-500 text-xs uppercase font-bold">
-                    Usuario
-                  </p>
-                  <p className="text-white text-lg">
-                    {viewDetailsClient.username}
-                  </p>
-                </div>
-                {viewDetailsClient.password && (
+
+            {/* Body Grid */}
+            <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Columna 1: Accesos */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Lock className="w-4 h-4" /> Credenciales
+                </h3>
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
                   <div>
-                    <p className="text-slate-500 text-xs uppercase font-bold">
+                    <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                      Usuario
+                    </label>
+                    <div className="flex items-center gap-2 text-white font-mono text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                      <User className="w-4 h-4 text-slate-500" />
+                      <span className="truncate">
+                        {viewDetailsClient.username}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
                       Contraseña
+                    </label>
+                    <div className="flex items-center gap-2 text-white font-mono text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50 justify-between">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <Lock className="w-4 h-4 text-slate-500" />
+                        <span className="truncate">
+                          {showClientPassword
+                            ? viewDetailsClient.password || "N/A"
+                            : "••••••••"}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() =>
+                          setShowClientPassword(!showClientPassword)
+                        }
+                        className="text-slate-400 hover:text-white p-1"
+                      >
+                        {showClientPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Columna 2: Fechas y Estado */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Activity className="w-4 h-4" /> Estado del Servicio
+                </h3>
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                        Inicio
+                      </label>
+                      <p className="text-white font-medium">
+                        {formatDate(viewDetailsClient.startDate)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                        Renovaciones
+                      </label>
+                      <span className="inline-flex items-center justify-center bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs font-bold border border-blue-500/20">
+                        {viewDetailsClient.renewals}{" "}
+                        <RefreshCw className="w-3 h-3 ml-1" />
+                      </span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-slate-700/50">
+                    <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                      Expiración
+                    </label>
+                    <p
+                      className={`text-2xl font-bold ${
+                        getDaysRemaining(viewDetailsClient.expiryDate) < 0
+                          ? "text-rose-500"
+                          : "text-emerald-400"
+                      }`}
+                    >
+                      {formatDate(viewDetailsClient.expiryDate)}
                     </p>
-                    <p className="text-white text-lg font-mono">
-                      {viewDetailsClient.password}
+                    <p className="text-xs text-slate-400 mt-1">
+                      {getDaysRemaining(viewDetailsClient.expiryDate) < 0
+                        ? "Servicio Vencido"
+                        : `${getDaysRemaining(
+                            viewDetailsClient.expiryDate
+                          )} días restantes`}
                     </p>
                   </div>
-                )}
-                <div>
-                  <p className="text-slate-500 text-xs uppercase font-bold">
-                    Expiración
-                  </p>
-                  <p
-                    className={`text-lg font-bold ${
-                      getDaysRemaining(viewDetailsClient.expiryDate) < 0
-                        ? "text-rose-400"
-                        : "text-emerald-400"
-                    }`}
+                </div>
+              </div>
+
+              {/* Columna 3: Contacto y Conexión */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Phone className="w-4 h-4" /> Contacto y Uso
+                </h3>
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
+                  <div
+                    onClick={() => openWhatsApp(viewDetailsClient)}
+                    className="cursor-pointer group"
                   >
-                    {formatDate(viewDetailsClient.expiryDate)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-slate-500 text-xs uppercase font-bold">
-                    Contacto
-                  </p>
-                  <p className="text-white text-lg">
-                    {viewDetailsClient.contact}
-                  </p>
-                </div>
-              </div>
-
-              {/* SECCIÓN MENSAJES RÁPIDOS */}
-              {viewDetailsClient.contact && (
-                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
-                  <p className="text-xs font-bold text-slate-500 uppercase mb-2">
-                    Mensajes Rápidos
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openWhatsApp(viewDetailsClient, "welcome")}
-                      className="flex-1 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 rounded text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                    >
-                      <PartyPopper className="w-3 h-3" /> Bienvenida
-                    </button>
-                    <button
-                      onClick={() =>
-                        openWhatsApp(viewDetailsClient, "paymentReceived")
-                      }
-                      className="flex-1 py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                    >
-                      <CreditCard className="w-3 h-3" /> Confirmar Pago
-                    </button>
+                    <label className="text-slate-500 text-xs font-bold uppercase block mb-1 group-hover:text-emerald-400 transition-colors">
+                      WhatsApp
+                    </label>
+                    <div className="flex items-center gap-2 text-white text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50 group-hover:border-emerald-500/50 transition-colors">
+                      <MessageCircle className="w-5 h-5 text-emerald-500" />
+                      <span>{viewDetailsClient.contact || "Sin número"}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                      Dispositivos
+                    </label>
+                    <div className="flex items-center gap-2 text-white text-lg">
+                      <Wifi className="w-5 h-5 text-blue-500" />
+                      <span>
+                        {viewDetailsClient.connections} Pantalla
+                        {viewDetailsClient.connections !== 1 ? "s" : ""}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              )}
-
-              <div className="flex gap-3 pt-4 border-t border-slate-800">
-                <button
-                  onClick={() => {
-                    closeDetailsModal();
-                    handleOpenRenewalModal(viewDetailsClient);
-                  }}
-                  className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold"
-                >
-                  Renovar
-                </button>
-                <button
-                  onClick={() => {
-                    closeDetailsModal();
-                    openModal(viewDetailsClient);
-                  }}
-                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-lg font-bold"
-                >
-                  Editar
-                </button>
               </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-6 bg-slate-900 border-t border-slate-800 flex gap-4">
+              <button
+                onClick={() => {
+                  closeDetailsModal();
+                  handleOpenRenewalModal(viewDetailsClient);
+                }}
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="w-5 h-5" /> Renovar Suscripción
+              </button>
+              <button
+                onClick={() => {
+                  closeDetailsModal();
+                  openModal(viewDetailsClient);
+                }}
+                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold border border-slate-700 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                <Edit2 className="w-5 h-5" /> Editar Datos
+              </button>
             </div>
           </div>
         </div>
