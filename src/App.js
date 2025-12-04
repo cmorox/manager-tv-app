@@ -41,7 +41,7 @@ import {
   HelpCircle,
   CreditCard,
   PartyPopper,
-  FileDown, // Icono para descargar plantilla
+  FileDown,
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -123,11 +123,10 @@ const DEFAULT_TEMPLATES = {
     "¡Gracias por tu pago {nombre}! 💸\nTu servicio de {plataforma} ha sido renovado correctamente.\nNueva fecha de vencimiento: {fecha}. ✅",
 };
 
-// Configuración de notificaciones por defecto (todas activas)
 const DEFAULT_NOTIFICATION_PREFS = {
-  checkIn15Days: true, // Seguimiento
-  reminderTomorrow: true, // Urgencia
-  recovery15Days: true, // Recuperación
+  checkIn15Days: true,
+  reminderTomorrow: true,
+  recovery15Days: true,
 };
 
 const AVAILABLE_COLORS = [
@@ -186,6 +185,28 @@ const parseCSVDate = (dateStr) => {
   return new Date().toISOString().split("T")[0];
 };
 
+// --- COMPONENTE BOTÓN CON TOOLTIP ---
+const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
+  <div className="relative group">
+    <button
+      onClick={onClick}
+      className={`p-2.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 relative border border-white/5 ${colorClass}`}
+    >
+      {icon}
+      {badge > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm border-2 border-slate-900">
+          {badge}
+        </span>
+      )}
+    </button>
+    {/* Tooltip */}
+    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-slate-900 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 border border-slate-700 shadow-xl">
+      {label}
+      <div className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-slate-900"></div>
+    </div>
+  </div>
+);
+
 const VariableToolbar = ({ onInsert }) => (
   <div className="flex flex-wrap gap-2 mb-2">
     <button
@@ -234,6 +255,7 @@ function LoginScreen() {
     e.preventDefault();
     setError("");
     setLoading(true);
+
     try {
       if (isRegistering) {
         await createUserWithEmailAndPassword(auth, email, password);
@@ -242,7 +264,19 @@ function LoginScreen() {
       }
     } catch (err) {
       console.error(err);
-      setError("Error: " + err.message);
+      if (
+        err.code === "auth/invalid-credential" ||
+        err.code === "auth/user-not-found" ||
+        err.code === "auth/wrong-password"
+      ) {
+        setError("Correo o contraseña incorrectos.");
+      } else if (err.code === "auth/email-already-in-use") {
+        setError("Este correo ya está registrado.");
+      } else if (err.code === "auth/weak-password") {
+        setError("La contraseña debe tener al menos 6 caracteres.");
+      } else {
+        setError("Error: " + err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -260,29 +294,35 @@ function LoginScreen() {
           </h1>
           <p className="text-slate-400 text-sm mt-1">Plataforma de Gestión</p>
         </div>
+
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">
               Correo
             </label>
-            <input
-              type="email"
-              required
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-blue-500 outline-none"
-              placeholder="usuario@ejemplo.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            <div className="relative group">
+              <Mail className="absolute left-3 top-3 w-5 h-5 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
+              <input
+                type="email"
+                required
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-10 pr-4 text-white focus:border-blue-500 outline-none transition-all placeholder-slate-600"
+                placeholder="usuario@ejemplo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
           </div>
+
           <div>
             <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">
               Contraseña
             </label>
-            <div className="relative">
+            <div className="relative group">
+              <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
               <input
                 type={showPassword ? "text" : "password"}
                 required
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-4 pr-10 text-white focus:border-blue-500 outline-none"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-10 pr-10 text-white focus:border-blue-500 outline-none transition-all placeholder-slate-600"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -290,7 +330,7 @@ function LoginScreen() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3 text-slate-500 hover:text-slate-300"
+                className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 transition-colors"
               >
                 {showPassword ? (
                   <EyeOff className="w-5 h-5" />
@@ -300,15 +340,18 @@ function LoginScreen() {
               </button>
             </div>
           </div>
+
           {error && (
-            <div className="text-rose-400 text-sm p-2 bg-rose-500/10 rounded">
-              {error}
+            <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm p-3 rounded-lg flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg mt-4 disabled:opacity-50"
+            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg mt-4 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             {loading
               ? "Procesando..."
@@ -317,13 +360,17 @@ function LoginScreen() {
               : "Iniciar Sesión"}
           </button>
         </form>
+
         <div className="mt-8 text-center pt-6 border-t border-slate-800">
+          <p className="text-slate-500 text-sm mb-2">
+            {isRegistering ? "¿Ya tienes una cuenta?" : "¿Eres nuevo aquí?"}
+          </p>
           <button
             onClick={() => {
               setIsRegistering(!isRegistering);
               setError("");
             }}
-            className="text-blue-400 hover:text-blue-300 font-medium text-sm hover:underline"
+            className="text-blue-400 hover:text-blue-300 font-medium text-sm hover:underline transition-colors"
           >
             {isRegistering ? "Inicia Sesión" : "Crear Cuenta Gratis"}
           </button>
@@ -340,16 +387,18 @@ export default function App() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Admin States
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
   const [viewingAsUser, setViewingAsUser] = useState(null);
 
+  // Config States
   const [userPlatforms, setUserPlatforms] = useState(DEFAULT_PLATFORMS);
   const [userTemplates, setUserTemplates] = useState(DEFAULT_TEMPLATES);
   const [userNotificationPrefs, setUserNotificationPrefs] = useState(
     DEFAULT_NOTIFICATION_PREFS
-  ); // Estado de preferencias
+  );
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState("platforms");
   const [newPlatformName, setNewPlatformName] = useState("");
@@ -358,6 +407,7 @@ export default function App() {
   );
   const [editingPlatform, setEditingPlatform] = useState(null);
 
+  // UI States
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [viewDetailsClient, setViewDetailsClient] = useState(null);
@@ -387,7 +437,7 @@ export default function App() {
     renewals: 1,
   });
 
-  // Auth Listener
+  // Listener de Autenticación
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -398,7 +448,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Registro Usuario
+  // Registro en Directorio
   useEffect(() => {
     if (user) {
       const registerUser = async () => {
@@ -419,7 +469,7 @@ export default function App() {
     }
   }, [user]);
 
-  // Carga Configuración
+  // Carga Config
   useEffect(() => {
     if (!user) return;
     const fetchSettings = async () => {
@@ -583,7 +633,6 @@ export default function App() {
     saveSettingsToDB(null, null, updated);
   };
 
-  // --- NUEVA FUNCIÓN: DESCARGAR PLANTILLA ---
   const handleDownloadTemplate = () => {
     const headers = [
       "STATUS",
@@ -1009,13 +1058,12 @@ export default function App() {
 
             <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 items-center">
               {isAdmin && !viewingAsUser && (
-                <button
+                <NavButton
                   onClick={() => setShowAdminPanel(true)}
-                  className="p-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30"
-                  title="Panel de Admin"
-                >
-                  <Shield className="w-5 h-5" />
-                </button>
+                  icon={<Shield className="w-5 h-5 text-amber-500" />}
+                  label="Admin Panel"
+                  colorClass="bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20"
+                />
               )}
               {viewingAsUser && (
                 <button
@@ -1026,68 +1074,59 @@ export default function App() {
                 </button>
               )}
 
-              <div className="relative">
-                <button
-                  onClick={() => setShowNotifications(true)}
-                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 relative"
-                >
-                  <Bell className="w-5 h-5" />
-                  {activeNotificationsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-lg">
-                      {activeNotificationsCount}
-                    </span>
-                  )}
-                </button>
-              </div>
+              <NavButton
+                onClick={() => setShowNotifications(true)}
+                icon={<Bell className="w-5 h-5 text-white" />}
+                label="Notificaciones"
+                colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                badge={activeNotificationsCount}
+              />
 
               <div className="w-px h-6 bg-slate-700 mx-1 hidden sm:block"></div>
 
               {!viewingAsUser && (
                 <>
-                  {/* Botón Descargar Plantilla (NUEVO) */}
-                  <button
+                  <NavButton
                     onClick={handleDownloadTemplate}
-                    className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600/50"
-                    title="Descargar Plantilla CSV"
-                  >
-                    <FileDown className="w-5 h-5" />
-                  </button>
-
-                  <button
+                    icon={<FileDown className="w-5 h-5 text-emerald-400" />}
+                    label="Bajar Plantilla"
+                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                  />
+                  <NavButton
                     onClick={triggerFileUpload}
-                    className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-slate-600/50 shadow-sm whitespace-nowrap"
-                  >
-                    <FileSpreadsheet className="w-4 h-4" />{" "}
-                    <span className="hidden sm:inline">Importar</span>
-                  </button>
-
-                  <button
+                    icon={
+                      <FileSpreadsheet className="w-5 h-5 text-emerald-500" />
+                    }
+                    label="Importar CSV"
+                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                  />
+                  <NavButton
                     onClick={handleExportCSV}
-                    className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600/50"
-                  >
-                    <Download className="w-5 h-5" />
-                  </button>
-                  <button
+                    icon={<Download className="w-5 h-5 text-blue-400" />}
+                    label="Exportar CSV"
+                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                  />
+                  <NavButton
                     onClick={() => setShowSettings(true)}
-                    className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600/50"
-                  >
-                    <Settings className="w-5 h-5" />
-                  </button>
-                  <button
+                    icon={<Settings className="w-5 h-5 text-slate-400" />}
+                    label="Configuración"
+                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                  />
+                  <NavButton
                     onClick={() => openModal()}
-                    className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium text-sm"
-                  >
-                    <Plus className="w-4 h-4" /> Nuevo
-                  </button>
+                    icon={<Plus className="w-5 h-5 text-white" />}
+                    label="Nuevo Cliente"
+                    colorClass="bg-blue-600 hover:bg-blue-500 border-blue-500"
+                  />
                 </>
               )}
 
-              <button
+              <NavButton
                 onClick={handleLogout}
-                className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-slate-700"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
+                icon={<LogOut className="w-5 h-5 text-rose-400" />}
+                label="Cerrar Sesión"
+                colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+              />
             </div>
           </div>
         </div>
@@ -1792,12 +1831,16 @@ export default function App() {
                     {viewDetailsClient.username}
                   </p>
                 </div>
-                <div>
-                  <p className="text-slate-500 text-xs uppercase font-bold">
-                    Contraseña
-                  </p>
-                  <p className="text-white text-lg">••••••</p>
-                </div>
+                {viewDetailsClient.password && (
+                  <div>
+                    <p className="text-slate-500 text-xs uppercase font-bold">
+                      Contraseña
+                    </p>
+                    <p className="text-white text-lg font-mono">
+                      {viewDetailsClient.password}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-slate-500 text-xs uppercase font-bold">
                     Expiración
@@ -2036,9 +2079,26 @@ export default function App() {
                   />
                 </div>
               </div>
+
+              {/* NUEVO CAMPO CONTRASEÑA EN FORMULARIO (Opcional pero oculto en la tabla principal) */}
               <div>
                 <label className="block text-xs text-slate-400 mb-1">
-                  NOMBRE
+                  CONTRASEÑA DE SERVICIO (Opcional)
+                </label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                  placeholder="Contraseña de la cuenta IPTV"
+                  value={formData.password || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  NOMBRE CLIENTE
                 </label>
                 <input
                   type="text"
