@@ -200,7 +200,7 @@ const GlobalStyles = () => (
 
 // --- COMPONENTE BOTÓN CON TOOLTIP ---
 const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
-  <div className="relative group">
+  <div className="relative group flex items-center">
     <button
       onClick={onClick}
       className={`p-2.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 relative border border-white/5 ${colorClass}`}
@@ -212,10 +212,11 @@ const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
         </span>
       )}
     </button>
-    {/* Tooltip Mejorado */}
-    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 px-3 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 border border-slate-700 shadow-xl">
+    {/* Tooltip Mejorado - Posicionado abajo y con z-index alto */}
+    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-black/90 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[999] border border-slate-700 shadow-xl backdrop-blur-sm">
       {label}
-      <div className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-slate-900"></div>
+      {/* Flechita del tooltip */}
+      <div className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-black/90"></div>
     </div>
   </div>
 );
@@ -450,7 +451,7 @@ export default function App() {
     renewals: 1,
   });
 
-  // Listener de Autenticación
+  // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -461,7 +462,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Registro en Directorio
+  // Registro Usuario
   useEffect(() => {
     if (user) {
       const registerUser = async () => {
@@ -838,7 +839,6 @@ export default function App() {
       alert("Nada para exportar.");
       return;
     }
-    // Quitada columna contraseña
     const headers = [
       "STATUS",
       "PLATAFORMA",
@@ -878,6 +878,7 @@ export default function App() {
       new Date().toISOString().split("T")[0]
     }.csv`;
     link.click();
+    document.body.removeChild(link);
   };
 
   const handleFileUpload = (e) => {
@@ -946,9 +947,7 @@ export default function App() {
     setShowModal(true);
   };
 
-  const openDetailsModal = (client) => {
-    setViewDetailsClient(client);
-  };
+  const openDetailsModal = (client) => setViewDetailsClient(client);
   const closeDetailsModal = () => setViewDetailsClient(null);
   const closeModal = () => {
     setShowModal(false);
@@ -1294,35 +1293,36 @@ export default function App() {
                       </td>
                       <td className="px-4 py-3 align-middle text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button
+                          {/* Botón WhatsApp DIRECTO */}
+                          <NavButton
                             onClick={() => openWhatsApp(client)}
-                            className="p-1.5 text-emerald-400 bg-emerald-900/20 rounded-lg hover:bg-emerald-900/40 border border-emerald-900/30 transition-colors group-hover:scale-105"
-                            title="WhatsApp"
-                          >
-                            <MessageCircle className="w-4 h-4" />
-                          </button>
+                            icon={<MessageCircle className="w-4 h-4" />}
+                            label="WhatsApp"
+                            colorClass="text-emerald-400 bg-emerald-900/20 hover:bg-emerald-900/40 border-emerald-900/30"
+                          />
                           <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                          <button
+                          {/* Botón Detalles (NUEVO: Usando NavButton para tooltip) */}
+                          <NavButton
                             onClick={() => openDetailsModal(client)}
-                            className="p-1.5 text-blue-400 bg-blue-900/20 rounded-lg hover:bg-blue-900/40 border border-blue-900/30 transition-colors group-hover:scale-105"
-                            title="Ver Detalles"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
+                            icon={<Eye className="w-4 h-4" />}
+                            label="Ver Detalles"
+                            colorClass="text-blue-400 bg-blue-900/20 hover:bg-blue-900/40 border-blue-900/30"
+                          />
+                          {/* Botón Renovar (NUEVO: Usando NavButton para tooltip) */}
+                          <NavButton
                             onClick={() => handleOpenRenewalModal(client)}
-                            title="Renovar"
-                            className="p-1.5 text-purple-400 bg-purple-900/20 rounded-lg hover:bg-purple-900/40 transition-colors"
-                          >
-                            <RefreshCw className="w-4 h-4" />
-                          </button>
+                            icon={<RefreshCw className="w-4 h-4" />}
+                            label="Renovar"
+                            colorClass="text-purple-400 bg-purple-900/20 hover:bg-purple-900/40 border-purple-900/30"
+                          />
+
                           {!viewingAsUser && (
-                            <button
+                            <NavButton
                               onClick={() => handleDelete(client.id)}
-                              className="p-1.5 text-rose-400 hover:text-rose-300 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                              icon={<Trash2 className="w-4 h-4" />}
+                              label="Eliminar"
+                              colorClass="text-rose-400 hover:text-rose-300 bg-transparent border-transparent hover:bg-rose-900/20"
+                            />
                           )}
                         </div>
                       </td>
