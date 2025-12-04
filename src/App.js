@@ -36,8 +36,8 @@ import {
   CheckSquare,
   Square,
   Shield,
-  CreditCard, // Icono para pago
-  PartyPopper, // Icono para bienvenida
+  HeartHandshake, // Icono para recuperación
+  HelpCircle, // Icono para seguimiento
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -101,21 +101,21 @@ const DEFAULT_PLATFORMS = [
 ];
 
 const DEFAULT_TEMPLATES = {
-  reminderTomorrow:
-    "Hola {nombre}, tu servicio de {plataforma} vence MAÑANA ({fecha}). ¿Deseas renovar para no perder la señal? 📺",
-  recovery15Days:
-    "Hola {nombre}, te extrañamos. Tu cuenta de {plataforma} venció hace 15 días. ¿Quieres reactivar hoy? 👋",
+  // AUTOMÁTICOS (Tabla)
   expired:
     "Hola {nombre}, tu servicio de {plataforma} venció el {fecha}. ¿Te gustaría reactivarlo?",
   expiringSoon:
     "Hola {nombre}, recordatorio: tu cuenta de {plataforma} vence pronto ({fecha}). ¿Deseas renovar?",
   active:
     "Hola {nombre}, aquí tienes los datos de tu cuenta {plataforma}:\nUsuario: {usuario}",
-  // NUEVAS PLANTILLAS
-  welcome:
-    "¡Hola {nombre}! Bienvenido a {plataforma}. 🌟\nTus datos de acceso son:\nUsuario: {usuario}\nExpiración: {fecha}\n¡Que lo disfrutes!",
-  paymentReceived:
-    "¡Gracias por tu pago {nombre}! 💸\nTu servicio de {plataforma} ha sido renovado correctamente.\nNueva fecha de vencimiento: {fecha}. ✅",
+
+  // ESPECÍFICOS (Notificaciones)
+  reminderTomorrow:
+    "Hola {nombre}, tu servicio de {plataforma} vence MAÑANA ({fecha}). ¿Deseas renovar para no perder la señal? 📺",
+  checkIn15Days:
+    "Hola {nombre}, faltan 15 días para que venza tu {plataforma}. ¿Todo va bien con el servicio? Queremos asegurarnos de que lo disfrutas. 🛠️",
+  recoveryLost:
+    "Hola {nombre}, te extrañamos. Han pasado días desde que venció tu {plataforma}. ¿Te gustaría regresar con una promo especial? 🎁",
 };
 
 const AVAILABLE_COLORS = [
@@ -678,12 +678,10 @@ export default function App() {
 
     if (type === "reminderTomorrow")
       message = processTemplate(userTemplates.reminderTomorrow);
-    else if (type === "recovery15Days")
-      message = processTemplate(userTemplates.recovery15Days);
-    else if (type === "welcome")
-      message = processTemplate(userTemplates.welcome);
-    else if (type === "paymentReceived")
-      message = processTemplate(userTemplates.paymentReceived);
+    else if (type === "checkIn15Days")
+      message = processTemplate(userTemplates.checkIn15Days);
+    else if (type === "recoveryLost")
+      message = processTemplate(userTemplates.recoveryLost);
     else {
       if (days < 0) message = processTemplate(userTemplates.expired);
       else if (days <= 5) message = processTemplate(userTemplates.expiringSoon);
@@ -865,7 +863,8 @@ export default function App() {
     if (!clients.length) return [];
     return clients.filter((client) => {
       const days = getDaysRemaining(client.expiryDate);
-      return days === 1 || days === -15;
+      // Días clave: 15 días antes (15), 1 día antes (1), 15 días después (-15)
+      return days === 15 || days === 1 || days === -15;
     });
   }, [clients]);
 
@@ -1401,10 +1400,11 @@ export default function App() {
                 </div>
               ) : (
                 <div className="space-y-5">
+                  {/* Vence Mañana */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
                       <label className="text-sm font-bold text-yellow-400">
-                        Vence Mañana
+                        Vence Mañana (1 día)
                       </label>
                     </div>
                     <VariableToolbar
@@ -1420,6 +1420,48 @@ export default function App() {
                       }
                     />
                   </div>
+
+                  {/* Check-In 15 Días Antes */}
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                    <div className="mb-2">
+                      <label className="text-sm font-bold text-blue-400 flex gap-2">
+                        <HelpCircle className="w-4 h-4" /> Seguimiento (Faltan
+                        15 días)
+                      </label>
+                    </div>
+                    <VariableToolbar
+                      onInsert={(v) => insertIntoTemplate("checkIn15Days", v)}
+                    />
+                    <textarea
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-blue-500 outline-none min-h-[80px]"
+                      value={userTemplates.checkIn15Days}
+                      onChange={(e) =>
+                        handleUpdateTemplate("checkIn15Days", e.target.value)
+                      }
+                    />
+                  </div>
+
+                  {/* Recuperación 15 Días Después */}
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                    <div className="mb-2">
+                      <label className="text-sm font-bold text-purple-400 flex gap-2">
+                        <HeartHandshake className="w-4 h-4" /> Recuperación
+                        (Hace 15 días)
+                      </label>
+                    </div>
+                    <VariableToolbar
+                      onInsert={(v) => insertIntoTemplate("recoveryLost", v)}
+                    />
+                    <textarea
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-purple-500 outline-none min-h-[80px]"
+                      value={userTemplates.recoveryLost}
+                      onChange={(e) =>
+                        handleUpdateTemplate("recoveryLost", e.target.value)
+                      }
+                    />
+                  </div>
+
+                  {/* Vencido */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
                       <label className="text-sm font-bold text-rose-400">
@@ -1434,42 +1476,6 @@ export default function App() {
                       value={userTemplates.expired}
                       onChange={(e) =>
                         handleUpdateTemplate("expired", e.target.value)
-                      }
-                    />
-                  </div>
-
-                  {/* NUEVOS TEMPLATES */}
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                    <div className="mb-2">
-                      <label className="text-sm font-bold text-emerald-400 flex gap-2">
-                        <PartyPopper className="w-4 h-4" /> Bienvenida
-                      </label>
-                    </div>
-                    <VariableToolbar
-                      onInsert={(v) => insertIntoTemplate("welcome", v)}
-                    />
-                    <textarea
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-emerald-500 outline-none min-h-[80px]"
-                      value={userTemplates.welcome}
-                      onChange={(e) =>
-                        handleUpdateTemplate("welcome", e.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                    <div className="mb-2">
-                      <label className="text-sm font-bold text-blue-400 flex gap-2">
-                        <CreditCard className="w-4 h-4" /> Pago Recibido
-                      </label>
-                    </div>
-                    <VariableToolbar
-                      onInsert={(v) => insertIntoTemplate("paymentReceived", v)}
-                    />
-                    <textarea
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-blue-500 outline-none min-h-[80px]"
-                      value={userTemplates.paymentReceived}
-                      onChange={(e) =>
-                        handleUpdateTemplate("paymentReceived", e.target.value)
                       }
                     />
                   </div>
@@ -1591,31 +1597,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SECCIÓN DE MENSAJES RÁPIDOS (NUEVA) */}
-              {viewDetailsClient.contact && (
-                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
-                  <p className="text-xs font-bold text-slate-500 uppercase mb-2">
-                    Mensajes Rápidos
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openWhatsApp(viewDetailsClient, "welcome")}
-                      className="flex-1 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 rounded text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                    >
-                      <PartyPopper className="w-3 h-3" /> Bienvenida
-                    </button>
-                    <button
-                      onClick={() =>
-                        openWhatsApp(viewDetailsClient, "paymentReceived")
-                      }
-                      className="flex-1 py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                    >
-                      <CreditCard className="w-3 h-3" /> Confirmar Pago
-                    </button>
-                  </div>
-                </div>
-              )}
-
               <div className="flex gap-3 pt-4 border-t border-slate-800">
                 <button
                   onClick={() => {
@@ -1659,33 +1640,100 @@ export default function App() {
                   Sin notificaciones pendientes.
                 </p>
               )}
-              {pendingNotifications.map((c) => (
-                <div
-                  key={c.id}
-                  className="bg-slate-800 p-3 rounded border border-slate-700 flex justify-between items-center"
-                >
-                  <div>
-                    <p className="text-white font-bold text-sm">{c.name}</p>
-                    <p className="text-slate-400 text-xs">
-                      Vence: {formatDate(c.expiryDate)}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => toggleCompleteTask(c.id)}
-                    className={`p-2 rounded ${
-                      completedTasks.includes(c.id)
-                        ? "text-emerald-400"
-                        : "text-slate-500"
+              {pendingNotifications.map((c) => {
+                const days = getDaysRemaining(c.expiryDate);
+                // Determinar tipo de alerta
+                let type = "reminderTomorrow";
+                let label = "Vence Mañana";
+                let style =
+                  "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
+
+                if (days === 15) {
+                  type = "checkIn15Days";
+                  label = "Seguimiento";
+                  style = "bg-blue-500/10 text-blue-400 border-blue-500/20";
+                } else if (days === -15) {
+                  type = "recoveryLost";
+                  label = "Recuperación";
+                  style =
+                    "bg-purple-500/10 text-purple-400 border-purple-500/20";
+                }
+
+                const isCompleted = completedTasks.includes(c.id);
+
+                return (
+                  <div
+                    key={c.id}
+                    className={`p-4 transition-colors rounded border border-slate-700 ${
+                      isCompleted
+                        ? "bg-slate-900/50 opacity-60"
+                        : "bg-slate-800"
                     }`}
                   >
-                    {completedTasks.includes(c.id) ? (
-                      <CheckSquare className="w-5 h-5" />
-                    ) : (
-                      <Square className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-              ))}
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <p
+                          className={`font-bold text-sm ${
+                            isCompleted
+                              ? "text-slate-400 line-through"
+                              : "text-white"
+                          }`}
+                        >
+                          {c.name}
+                        </p>
+                        <p className="text-slate-400 text-xs mt-0.5">
+                          {c.platform} • {c.contact}
+                        </p>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-1 rounded uppercase border ${style}`}
+                      >
+                        {label}
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      {c.contact ? (
+                        <button
+                          onClick={() => openWhatsApp(c, type)}
+                          disabled={isCompleted}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                            isCompleted
+                              ? "bg-slate-800 text-slate-500 cursor-not-allowed"
+                              : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:scale-[1.02]"
+                          }`}
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          Enviar WhatsApp
+                        </button>
+                      ) : (
+                        <div className="flex-1 text-xs text-slate-600 text-center italic p-2 bg-slate-900 rounded border border-slate-800">
+                          Sin contacto
+                        </div>
+                      )}
+                      <button
+                        onClick={() => toggleCompleteTask(c.id)}
+                        className={`p-2 rounded-lg border transition-all ${
+                          isCompleted
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
+                        }`}
+                        title={
+                          isCompleted
+                            ? "Marcar como pendiente"
+                            : "Marcar como completado"
+                        }
+                      >
+                        {isCompleted ? (
+                          <CheckSquare className="w-4 h-4" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
