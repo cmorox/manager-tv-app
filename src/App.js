@@ -35,6 +35,7 @@ import {
   MessageSquare,
   CheckSquare,
   Square,
+  Shield, // Icono de Admin agregado
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -63,6 +64,9 @@ import {
 // ------------------------------------------------------------------
 // CONFIGURACIÓN DE FIREBASE
 // ------------------------------------------------------------------
+
+// TU CORREO DE ADMINISTRADOR
+const ADMIN_EMAIL = "cristianmoro482@gmail.com";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBlMkxT9etzHa9m0Iv7UI6a8IyM2sT7rVI",
@@ -126,6 +130,7 @@ const AVAILABLE_COLORS = [
   { name: "Negro", class: "bg-slate-900" },
 ];
 
+// --- Helpers ---
 const formatDate = (dateString) => {
   if (!dateString) return "-";
   const options = { year: "numeric", month: "short", day: "numeric" };
@@ -149,80 +154,51 @@ const getDaysRemaining = (expiryDate) => {
 const parseCSVDate = (dateStr) => {
   if (!dateStr) return new Date().toISOString().split("T")[0];
   let cleanDateStr = dateStr.trim();
-  if (cleanDateStr.includes("/")) {
-    const parts = cleanDateStr.split("/");
-    if (parts.length === 3) {
-      return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(
-        2,
-        "0"
-      )}`;
-    }
-  }
-  if (cleanDateStr.includes(" de ")) {
-    const parts = cleanDateStr.toLowerCase().split(" de ");
-    if (parts.length === 3) {
-      const day = parts[0].replace(/\D/g, "").padStart(2, "0");
-      const year = parts[2].replace(/\D/g, "");
-      const months = {
-        enero: "01",
-        febrero: "02",
-        marzo: "03",
-        abril: "04",
-        mayo: "05",
-        junio: "06",
-        julio: "07",
-        agosto: "08",
-        septiembre: "09",
-        octubre: "10",
-        noviembre: "11",
-        diciembre: "12",
-      };
-      const monthName = parts[1].trim();
-      const month = months[monthName] || "01";
-      return `${year}-${month}-${day}`;
-    }
-  }
   try {
-    const d = new Date(cleanDateStr);
-    if (!isNaN(d.getTime())) {
-      return d.toISOString().split("T")[0];
+    if (cleanDateStr.includes("/")) {
+      const parts = cleanDateStr.split("/");
+      if (parts.length === 3)
+        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(
+          2,
+          "0"
+        )}`;
     }
-  } catch (e) {
-    console.warn("Fecha inválida en CSV:", dateStr);
-  }
+    const d = new Date(cleanDateStr);
+    if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+  } catch (e) {}
   return new Date().toISOString().split("T")[0];
 };
 
-// --- COMPONENTE HELPER: BARRA DE VARIABLES ---
+// Componente Barra de Variables
 const VariableToolbar = ({ onInsert }) => (
   <div className="flex flex-wrap gap-2 mb-2">
     <button
       onClick={() => onInsert("{nombre}")}
-      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded transition-colors border border-slate-600"
+      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded border border-slate-600"
     >
       <User className="w-3 h-3" /> Nombre
     </button>
     <button
       onClick={() => onInsert("{plataforma}")}
-      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded transition-colors border border-slate-600"
+      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded border border-slate-600"
     >
       <Tv className="w-3 h-3" /> Plataforma
     </button>
     <button
       onClick={() => onInsert("{fecha}")}
-      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded transition-colors border border-slate-600"
+      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded border border-slate-600"
     >
       <Calendar className="w-3 h-3" /> Fecha
     </button>
     <button
       onClick={() => onInsert("{usuario}")}
-      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded transition-colors border border-slate-600"
+      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded border border-slate-600"
     >
       <Hash className="w-3 h-3" /> Usuario
     </button>
     <button
       onClick={() => onInsert("{dias}")}
-      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded transition-colors border border-slate-600"
+      className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-blue-600 text-slate-200 text-xs rounded border border-slate-600"
     >
       <Activity className="w-3 h-3" /> Días Restantes
     </button>
@@ -250,19 +226,7 @@ function LoginScreen() {
       }
     } catch (err) {
       console.error(err);
-      if (
-        err.code === "auth/invalid-credential" ||
-        err.code === "auth/user-not-found" ||
-        err.code === "auth/wrong-password"
-      ) {
-        setError("Correo o contraseña incorrectos.");
-      } else if (err.code === "auth/email-already-in-use") {
-        setError("Este correo ya está registrado.");
-      } else if (err.code === "auth/weak-password") {
-        setError("La contraseña debe tener al menos 6 caracteres.");
-      } else {
-        setError("Error: " + err.message);
-      }
+      setError("Error: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -283,50 +247,40 @@ function LoginScreen() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-              Correo Electrónico
+            <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">
+              Correo
             </label>
-            <div className="relative group">
-              <Mail className="absolute left-3 top-3 w-5 h-5 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
-              <input
-                type="email"
-                required
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-10 pr-4 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder-slate-600"
-                placeholder="usuario@ejemplo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+            <input
+              type="email"
+              required
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-blue-500 outline-none"
+              placeholder="usuario@ejemplo.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
-
           <div>
-            <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+            <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">
               Contraseña
             </label>
-            <div className="relative group">
-              <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
-              <input
-                type="password"
-                required
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-10 pr-4 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder-slate-600"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            <input
+              type="password"
+              required
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-blue-500 outline-none"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
-
           {error && (
-            <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm p-3 rounded-lg flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
+            <div className="text-rose-400 text-sm p-2 bg-rose-500/10 rounded">
+              {error}
             </div>
           )}
-
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg mt-4 disabled:opacity-50"
           >
             {loading
               ? "Procesando..."
@@ -337,15 +291,12 @@ function LoginScreen() {
         </form>
 
         <div className="mt-8 text-center pt-6 border-t border-slate-800">
-          <p className="text-slate-500 text-sm mb-2">
-            {isRegistering ? "¿Ya tienes una cuenta?" : "¿Eres nuevo aquí?"}
-          </p>
           <button
             onClick={() => {
               setIsRegistering(!isRegistering);
               setError("");
             }}
-            className="text-blue-400 hover:text-blue-300 font-medium text-sm transition-colors hover:underline"
+            className="text-blue-400 hover:text-blue-300 font-medium text-sm hover:underline"
           >
             {isRegistering ? "Inicia Sesión" : "Crear Cuenta Gratis"}
           </button>
@@ -355,14 +306,21 @@ function LoginScreen() {
   );
 }
 
-// --- Componente Principal ---
+// --- COMPONENTE PRINCIPAL ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Estado para Configuración
+  // --- ADMIN STATES (NUEVO) ---
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
+  const [viewingAsUser, setViewingAsUser] = useState(null); // ID del usuario a espiar
+  // ----------------------------
+
+  // Config States
   const [userPlatforms, setUserPlatforms] = useState(DEFAULT_PLATFORMS);
   const [userTemplates, setUserTemplates] = useState(DEFAULT_TEMPLATES);
   const [showSettings, setShowSettings] = useState(false);
@@ -373,7 +331,7 @@ export default function App() {
   );
   const [editingPlatform, setEditingPlatform] = useState(null);
 
-  // Estados de UI
+  // UI States
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [viewDetailsClient, setViewDetailsClient] = useState(null);
@@ -403,20 +361,48 @@ export default function App() {
     renewals: 1,
   });
 
-  // Listener de Autenticación
+  // 1. Auth Listener (Con chequeo de Admin)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthChecking(false);
+      if (currentUser && currentUser.email === ADMIN_EMAIL) {
+        setIsAdmin(true);
+      } else {
+        setIsAdmin(false);
+      }
     });
     return () => unsubscribe();
   }, []);
 
-  // Carga de Configuración
+  // 2. Registro en Directorio de Usuarios (Para que el admin los vea)
+  useEffect(() => {
+    if (user) {
+      const registerUser = async () => {
+        try {
+          await setDoc(
+            doc(db, "artifacts", appId, "user_directory", user.uid),
+            {
+              email: user.email,
+              lastSeen: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } catch (e) {
+          console.error(e);
+        }
+      };
+      registerUser();
+    }
+  }, [user]);
+
+  // 3. Carga de Configuración
   useEffect(() => {
     if (!user) return;
     const fetchSettings = async () => {
       try {
+        // Si estamos viendo como otro usuario, podríamos cargar SUS plataformas,
+        // pero para simplificar usamos las del usuario logueado (tú) o defaults.
         const docRef = doc(
           db,
           "artifacts",
@@ -436,13 +422,67 @@ export default function App() {
           setUserTemplates(DEFAULT_TEMPLATES);
         }
       } catch (error) {
-        console.error("Error cargando configuración:", error);
+        console.error(error);
       }
     };
     fetchSettings();
   }, [user]);
 
-  // Guardar Configuración
+  // 4. Carga de Clientes (Soporta "Ver Como")
+  useEffect(() => {
+    if (!user) {
+      setClients([]);
+      return;
+    }
+    setLoading(true);
+
+    // Si viewingAsUser existe, usamos su ID. Si no, usamos el propio.
+    const targetUid = viewingAsUser ? viewingAsUser.id : user.uid;
+    const q = query(
+      collection(db, "artifacts", appId, "users", targetUid, "clients")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const clientsData = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setClients(clientsData);
+        setLoading(false);
+      },
+      (error) => {
+        console.error(error);
+        setLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, [user, viewingAsUser]);
+
+  // 5. Cargar lista de usuarios (Solo Admin)
+  useEffect(() => {
+    if (isAdmin && showAdminPanel) {
+      const fetchAllUsers = async () => {
+        try {
+          const q = query(collection(db, "artifacts", appId, "user_directory"));
+          const snapshot = await getDocs(q);
+          setAllUsers(
+            snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+          );
+        } catch (e) {
+          console.error(e);
+        }
+      };
+      fetchAllUsers();
+    }
+  }, [isAdmin, showAdminPanel]);
+
+  // --- FUNCIONES ---
+  const handleLogout = async () => {
+    await signOut(auth);
+  };
+
   const saveSettingsToDB = async (newPlatforms, newTemplates) => {
     if (!user) return;
     try {
@@ -455,7 +495,7 @@ export default function App() {
         { merge: true }
       );
     } catch (error) {
-      console.error("Error guardando configuración:", error);
+      console.error(error);
     }
   };
 
@@ -467,7 +507,7 @@ export default function App() {
       color: newPlatformColor,
     };
     if (userPlatforms.some((p) => p.name === newPlat.name)) {
-      alert("Esa plataforma ya existe.");
+      alert("Ya existe.");
       return;
     }
     const updated = [...userPlatforms, newPlat];
@@ -477,11 +517,7 @@ export default function App() {
   };
 
   const handleDeletePlatform = (id) => {
-    if (
-      confirm(
-        "¿Eliminar esta plataforma de la lista? (No afectará a clientes ya creados)"
-      )
-    ) {
+    if (confirm("¿Eliminar plataforma?")) {
       const updated = userPlatforms.filter((p) => p.id !== id);
       setUserPlatforms(updated);
       saveSettingsToDB(updated, null);
@@ -490,7 +526,6 @@ export default function App() {
 
   const startEditingPlatform = (plat) => setEditingPlatform({ ...plat });
   const cancelEditingPlatform = () => setEditingPlatform(null);
-
   const saveEditedPlatform = () => {
     if (!editingPlatform.name.trim()) return;
     const updatedPlatforms = userPlatforms.map((p) =>
@@ -515,59 +550,20 @@ export default function App() {
 
   const insertIntoTemplate = (key, variable) => {
     const currentText = userTemplates[key] || "";
-    const updatedText = currentText + " " + variable;
-    handleUpdateTemplate(key, updatedText);
+    handleUpdateTemplate(key, currentText + " " + variable);
   };
 
-  // Carga de Clientes
-  useEffect(() => {
-    if (!user) {
-      setClients([]);
-      return;
-    }
-    setLoading(true);
-    const q = query(
-      collection(db, "artifacts", appId, "users", user.uid, "clients")
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const clientsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setClients(clientsData);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error leyendo clientes:", error);
-        setLoading(false);
-      }
-    );
-    return () => unsubscribe();
-  }, [user]);
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error("Error cerrando sesión:", error);
-    }
+  // Helper para obtener la colección correcta (Propia o de otro usuario)
+  const getTargetCollection = () => {
+    const targetUid = viewingAsUser ? viewingAsUser.id : user.uid;
+    return collection(db, "artifacts", appId, "users", targetUid, "clients");
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     if (!user) return;
     try {
-      const collectionRef = collection(
-        db,
-        "artifacts",
-        appId,
-        "users",
-        user.uid,
-        "clients"
-      );
+      const collectionRef = getTargetCollection();
       if (editingClient) {
         await updateDoc(doc(collectionRef, editingClient.id), formData);
       } else {
@@ -578,54 +574,36 @@ export default function App() {
       }
       closeModal();
     } catch (error) {
-      console.error("Error guardando:", error);
-      alert("Error al guardar: " + error.message);
+      alert("Error: " + error.message);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("¿Estás seguro de eliminar este cliente permanentemente?"))
-      return;
+    if (!confirm("¿Eliminar cliente?")) return;
     try {
+      // Borramos en la colección objetivo (sea propia o de otro usuario)
+      const targetUid = viewingAsUser ? viewingAsUser.id : user.uid;
       await deleteDoc(
-        doc(db, "artifacts", appId, "users", user.uid, "clients", id)
+        doc(db, "artifacts", appId, "users", targetUid, "clients", id)
       );
       if (viewDetailsClient && viewDetailsClient.id === id) closeDetailsModal();
     } catch (error) {
-      console.error("Error eliminando:", error);
+      console.error(error);
     }
   };
 
   const handleDeleteAll = async () => {
     if (clients.length === 0) return;
-    if (
-      !confirm(
-        "⚠️ ¡PELIGRO! ¿Estás seguro de que quieres ELIMINAR TODOS los clientes?\n\nEsta acción no se puede deshacer."
-      )
-    )
-      return;
-    if (
-      !confirm("¿De verdad? Se borrarán todos los registros permanentemente.")
-    )
-      return;
+    if (!confirm("¿ELIMINAR TODOS?")) return;
     try {
       setLoading(true);
-      const collectionRef = collection(
-        db,
-        "artifacts",
-        appId,
-        "users",
-        user.uid,
-        "clients"
-      );
+      const collectionRef = getTargetCollection();
       const snapshot = await getDocs(collectionRef);
       const batch = writeBatch(db);
       snapshot.docs.forEach((doc) => batch.delete(doc.ref));
       await batch.commit();
-      alert("Se han eliminado todos los clientes.");
     } catch (error) {
-      console.error("Error eliminando todo:", error);
-      alert("Error al eliminar: " + error.message);
+      alert("Error: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -634,24 +612,13 @@ export default function App() {
   const handleOpenRenewalModal = (client) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
     const expiryParts = client.expiryDate.split("-");
     const currentExpiry = new Date(
       expiryParts[0],
       expiryParts[1] - 1,
       expiryParts[2]
     );
-
-    let baseDate;
-    let isReactivation = false;
-
-    if (currentExpiry < today) {
-      baseDate = today;
-      isReactivation = true;
-    } else {
-      baseDate = currentExpiry;
-    }
-
+    let baseDate = currentExpiry < today ? today : currentExpiry;
     const defaultNewExpiry = new Date(baseDate);
     defaultNewExpiry.setMonth(defaultNewExpiry.getMonth() + 1);
 
@@ -659,7 +626,7 @@ export default function App() {
     setRenewalData({
       newExpiryDate: defaultNewExpiry.toISOString().split("T")[0],
       baseDateUsed: baseDate,
-      isReactivation: isReactivation,
+      isReactivation: currentExpiry < today,
     });
   };
 
@@ -680,18 +647,19 @@ export default function App() {
         expiryDate: renewalData.newExpiryDate,
         renewals: (parseInt(renewingClient.renewals) || 0) + 1,
       };
-      if (renewalData.isReactivation) {
+      if (renewalData.isReactivation)
         updates.startDate = renewalData.baseDateUsed
           .toISOString()
           .split("T")[0];
-      }
+
+      const targetUid = viewingAsUser ? viewingAsUser.id : user.uid;
       await updateDoc(
         doc(
           db,
           "artifacts",
           appId,
           "users",
-          user.uid,
+          targetUid,
           "clients",
           renewingClient.id
         ),
@@ -701,72 +669,53 @@ export default function App() {
       if (viewDetailsClient && viewDetailsClient.id === renewingClient.id)
         closeDetailsModal();
     } catch (error) {
-      console.error("Error renovando:", error);
-      alert("Error al guardar la renovación.");
+      alert("Error al renovar.");
     }
   };
 
-  const handleQuickRenew = async (client) => {
-    handleOpenRenewalModal(client);
-  };
+  const handleQuickRenew = async (client) => handleOpenRenewalModal(client);
 
-  // --- FUNCIÓN WHATSAPP INTELIGENTE ---
   const openWhatsApp = (client, type = "default") => {
     if (!client || !client.contact) return;
     const cleanPhone = client.contact.replace(/\D/g, "");
     if (!cleanPhone) return;
-
     const days = getDaysRemaining(client.expiryDate);
     let message = "";
     const formattedDate = formatDate(client.expiryDate);
     const platformObj = userPlatforms.find((p) => p.id === client.platform);
     const platformName = platformObj ? platformObj.name : client.platform;
-
-    const processTemplate = (template) => {
-      return template
+    const processTemplate = (template) =>
+      template
         .replace("{nombre}", client.name)
         .replace("{plataforma}", platformName)
         .replace("{fecha}", formattedDate)
         .replace("{usuario}", client.username)
         .replace("{dias}", days);
-    };
 
-    if (type === "reminderTomorrow") {
+    if (type === "reminderTomorrow")
       message = processTemplate(userTemplates.reminderTomorrow);
-    } else if (type === "recovery15Days") {
+    else if (type === "recovery15Days")
       message = processTemplate(userTemplates.recovery15Days);
-    } else {
-      if (days < 0) {
-        message = processTemplate(userTemplates.expired);
-      } else if (days <= 5) {
-        message = processTemplate(userTemplates.expiringSoon);
-      } else {
-        message = processTemplate(userTemplates.active);
-      }
+    else {
+      if (days < 0) message = processTemplate(userTemplates.expired);
+      else if (days <= 5) message = processTemplate(userTemplates.expiringSoon);
+      else message = processTemplate(userTemplates.active);
     }
-
     const encodedMessage = encodeURIComponent(message);
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-    if (isMobile) {
-      window.open(
-        `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`,
-        "_blank"
-      );
-    } else {
-      window.open(
-        `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`,
-        "_blank"
-      );
-    }
+    window.open(
+      isMobile
+        ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`
+        : `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`,
+      "_blank"
+    );
   };
 
   const handleExportCSV = () => {
     if (clients.length === 0) {
-      alert("No hay clientes para exportar.");
+      alert("Nada para exportar.");
       return;
     }
-
     const headers = [
       "STATUS",
       "PLATAFORMA",
@@ -779,14 +728,10 @@ export default function App() {
       "CONEXIONES",
       "CONTRATACIONES",
     ];
-
     const rows = clients.map((client) => {
       const days = getDaysRemaining(client.expiryDate);
-      let status = "ON";
-      if (days < 0) status = "OFF";
-
       return [
-        status,
+        days < 0 ? "OFF" : "ON",
         client.platform,
         client.customId || "",
         client.username,
@@ -797,42 +742,32 @@ export default function App() {
         client.connections,
         client.renewals,
       ]
-        .map((field) => `"${String(field || "").replace(/"/g, '""')}"`)
+        .map((f) => `"${String(f || "").replace(/"/g, '""')}"`)
         .join(",");
     });
-
-    const csvContent = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-
     const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      `clientes_proview_${new Date().toISOString().split("T")[0]}.csv`
+    link.href = URL.createObjectURL(
+      new Blob([[headers.join(","), ...rows].join("\n")], {
+        type: "text/csv;charset=utf-8;",
+      })
     );
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
+    link.download = `clientes_proview_${
+      new Date().toISOString().split("T")[0]
+    }.csv`;
     link.click();
-    document.body.removeChild(link);
   };
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const text = event.target.result;
-      const lines = text.split("\n");
+      const lines = event.target.result.split("\n");
       const newClients = [];
-
       for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const cols = line.split(",");
+        const cols = lines[i].trim().split(",");
         if (cols.length >= 8) {
-          const clientData = {
+          newClients.push({
             platform: cols[1]?.replace(/"/g, "").trim() || "OTRO",
             customId: cols[2]?.replace(/"/g, "").trim() || "",
             username: cols[3]?.replace(/"/g, "").trim() || "Sin Usuario",
@@ -843,41 +778,17 @@ export default function App() {
             connections: parseInt(cols[8]?.replace(/"/g, "")) || 1,
             renewals: parseInt(cols[9]?.replace(/"/g, "")) || 1,
             createdAt: serverTimestamp(),
-          };
-          newClients.push(clientData);
+          });
         }
       }
-
-      if (newClients.length > 0) {
-        if (confirm(`¿Importar ${newClients.length} clientes?`)) {
-          try {
-            const batch = writeBatch(db);
-            const collectionRef = collection(
-              db,
-              "artifacts",
-              appId,
-              "users",
-              user.uid,
-              "clients"
-            );
-            const batchClients = newClients.slice(0, 490);
-            batchClients.forEach((client) => {
-              const newDocRef = doc(collectionRef);
-              batch.set(newDocRef, client);
-            });
-            await batch.commit();
-            alert(
-              `¡Importación exitosa! Se subieron ${batchClients.length} clientes.`
-            );
-          } catch (error) {
-            console.error("Error importando:", error);
-            alert("Hubo un error al subir los datos.");
-          }
-        }
-      } else {
-        alert(
-          "No se encontraron datos válidos. Verifica el orden de columnas."
-        );
+      if (newClients.length > 0 && confirm(`¿Importar ${newClients.length}?`)) {
+        const batch = writeBatch(db);
+        // Usa la colección objetivo (importa a la cuenta que estás viendo)
+        const collectionRef = getTargetCollection();
+        newClients
+          .slice(0, 490)
+          .forEach((c) => batch.set(doc(collectionRef), c));
+        await batch.commit();
       }
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
@@ -886,33 +797,18 @@ export default function App() {
 
   const triggerFileUpload = () => fileInputRef.current.click();
 
-  // --- FUNCIONES PARA MODALES ---
-
-  // 1. Modal Crear/Editar
   const openModal = (client = null) => {
     if (client) {
       setEditingClient(client);
-      setFormData({
-        platform: client.platform,
-        customId: client.customId || "",
-        username: client.username,
-        name: client.name,
-        contact: client.contact,
-        connections: client.connections,
-        startDate: client.startDate,
-        expiryDate: client.expiryDate,
-        renewals: client.renewals,
-      });
+      setFormData({ ...client });
     } else {
       setEditingClient(null);
       const today = new Date();
       const nextMonth = new Date(new Date().setMonth(today.getMonth() + 1));
-      // Safe fallback if platforms empty
       const defaultPlatform =
         Array.isArray(userPlatforms) && userPlatforms.length > 0
           ? userPlatforms[0].id
           : "OTRO";
-
       setFormData({
         platform: defaultPlatform,
         customId: "",
@@ -928,64 +824,39 @@ export default function App() {
     setShowModal(true);
   };
 
+  const openDetailsModal = (client) => setViewDetailsClient(client);
+  const closeDetailsModal = () => setViewDetailsClient(null);
   const closeModal = () => {
     setShowModal(false);
     setEditingClient(null);
   };
 
-  // 2. Modal Detalles
-  const openDetailsModal = (client) => {
-    setViewDetailsClient(client);
-  };
-
-  const closeDetailsModal = () => {
-    setViewDetailsClient(null);
-  };
-
   const toggleCompleteTask = (id) => {
-    setCompletedTasks((prev) => {
-      if (prev.includes(id)) {
-        return prev.filter((taskId) => taskId !== id);
-      } else {
-        return [...prev, id];
-      }
-    });
+    setCompletedTasks((prev) =>
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+    );
   };
-
-  const pendingNotifications = useMemo(() => {
-    if (!clients.length) return [];
-    return clients.filter((client) => {
-      const days = getDaysRemaining(client.expiryDate);
-      return days === 1 || days === -15;
-    });
-  }, [clients]);
 
   const filteredClients = useMemo(() => {
-    let result = clients.filter((client) => {
-      const days = getDaysRemaining(client.expiryDate);
-      const matchesSearch =
-        client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        client.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        client.platform.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (client.customId && client.customId.toString().includes(searchTerm));
-
-      if (!matchesSearch) return false;
+    let result = clients.filter((c) => {
+      const days = getDaysRemaining(c.expiryDate);
+      const search =
+        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.platform.toLowerCase().includes(searchTerm.toLowerCase());
+      if (!search) return false;
       if (filterStatus === "active") return days >= 0;
       if (filterStatus === "expired") return days < 0;
       if (filterStatus === "expiring") return days >= 0 && days <= 5;
       return true;
     });
-
-    result.sort((a, b) => {
-      if (sortOption === "platform") {
-        return a.platform.localeCompare(b.platform);
-      } else if (sortOption === "name") {
-        return a.name.localeCompare(b.name);
-      } else {
-        return new Date(a.expiryDate) - new Date(b.expiryDate);
-      }
-    });
-
+    result.sort((a, b) =>
+      sortOption === "name"
+        ? a.name.localeCompare(b.name)
+        : sortOption === "platform"
+        ? a.platform.localeCompare(b.platform)
+        : new Date(a.expiryDate) - new Date(b.expiryDate)
+    );
     return result;
   }, [clients, searchTerm, filterStatus, sortOption]);
 
@@ -1003,21 +874,25 @@ export default function App() {
     return { active, expired, expiringSoon, total: clients.length };
   }, [clients]);
 
+  const pendingNotifications = useMemo(() => {
+    if (!clients.length) return [];
+    return clients.filter((client) => {
+      const days = getDaysRemaining(client.expiryDate);
+      return days === 1 || days === -15;
+    });
+  }, [clients]);
+
   const activeNotificationsCount = pendingNotifications.filter(
     (n) => !completedTasks.includes(n.id)
   ).length;
 
-  if (authChecking) {
+  if (authChecking)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-blue-400 font-medium">
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-blue-400">
         Cargando...
       </div>
     );
-  }
-
-  if (!user) {
-    return <LoginScreen />;
-  }
+  if (!user) return <LoginScreen />;
 
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-gray-100 pb-20 transition-colors duration-300">
@@ -1041,34 +916,58 @@ export default function App() {
                 <h1 className="text-xl font-bold tracking-tight text-white">
                   Proview TV
                 </h1>
-                <span className="bg-blue-900/40 text-blue-300 text-[10px] px-1.5 py-0.5 rounded border border-blue-700/30 flex items-center gap-1">
-                  <Lock className="w-3 h-3" /> Privado
-                </span>
+                {isAdmin ? (
+                  <span className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
+                    <Shield className="w-3 h-3" /> Admin
+                  </span>
+                ) : (
+                  <span className="bg-blue-900/40 text-blue-300 text-[10px] px-1.5 py-0.5 rounded border border-blue-700/30 flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Privado
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 truncate w-32 md:w-auto flex items-center gap-1">
-                <User className="w-3 h-3" /> {user.email}
+                <User className="w-3 h-3" />{" "}
+                {viewingAsUser ? `Viendo: ${viewingAsUser.email}` : user.email}
               </p>
             </div>
           </div>
+
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            {/* Buscador */}
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Buscar..."
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-200 placeholder-slate-500 transition-all text-sm outline-none"
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 focus:border-blue-500 text-slate-200 text-sm outline-none"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
 
-            {/* Botones */}
             <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 items-center">
+              {isAdmin && !viewingAsUser && (
+                <button
+                  onClick={() => setShowAdminPanel(true)}
+                  className="p-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30"
+                  title="Panel de Admin"
+                >
+                  <Shield className="w-5 h-5" />
+                </button>
+              )}
+              {viewingAsUser && (
+                <button
+                  onClick={() => setViewingAsUser(null)}
+                  className="flex-1 sm:flex-none bg-rose-600 hover:bg-rose-500 text-white px-3 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-bold"
+                >
+                  <LogOut className="w-4 h-4" /> Salir de {viewingAsUser.email}
+                </button>
+              )}
+
               <div className="relative">
                 <button
                   onClick={() => setShowNotifications(true)}
-                  className="p-2 rounded-lg transition-all relative bg-slate-800 hover:bg-slate-700 text-slate-300"
+                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 relative"
                 >
                   <Bell className="w-5 h-5" />
                   {activeNotificationsCount > 0 && (
@@ -1081,52 +980,48 @@ export default function App() {
 
               <div className="w-px h-6 bg-slate-700 mx-1 hidden sm:block"></div>
 
-              <button
-                onClick={triggerFileUpload}
-                className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-slate-600/50 shadow-sm whitespace-nowrap"
-              >
-                <FileSpreadsheet className="w-4 h-4" />{" "}
-                <span className="hidden sm:inline">Importar</span>
-              </button>
+              {!viewingAsUser && (
+                <>
+                  <button
+                    onClick={triggerFileUpload}
+                    className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600/50"
+                  >
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={handleExportCSV}
+                    className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600/50"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setShowSettings(true)}
+                    className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600/50"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => openModal()}
+                    className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium text-sm"
+                  >
+                    <Plus className="w-4 h-4" /> Nuevo
+                  </button>
+                </>
+              )}
 
-              <button
-                onClick={handleExportCSV}
-                className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-slate-600/50 shadow-sm whitespace-nowrap"
-                title="Exportar Clientes a CSV"
-              >
-                <Download className="w-4 h-4" />{" "}
-                <span className="hidden sm:inline">Exportar</span>
-              </button>
-
-              <button
-                onClick={() => setShowSettings(true)}
-                className="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all text-sm border border-slate-600/50 shadow-sm whitespace-nowrap"
-                title="Configurar Plataformas"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => openModal()}
-                className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 font-medium transition-all shadow-lg shadow-blue-900/20 active:scale-95 text-sm whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4" />{" "}
-                <span className="hidden sm:inline">Nuevo</span>
-              </button>
               <button
                 onClick={handleLogout}
-                className="flex-1 sm:flex-none bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-lg border border-slate-700 transition-colors"
-                title="Cerrar Sesión"
+                className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-slate-700"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-5 h-5" />
               </button>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Main Content */}
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <StatsCard
             title="Total Clientes"
@@ -1162,8 +1057,8 @@ export default function App() {
           />
         </div>
 
-        {/* Tabla */}
         <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700/50 overflow-hidden">
+          {/* Header Tabla */}
           <div className="p-4 border-b border-slate-700 bg-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 text-slate-300 font-semibold text-sm">
@@ -1176,10 +1071,10 @@ export default function App() {
                 <select
                   value={sortOption}
                   onChange={(e) => setSortOption(e.target.value)}
-                  className="pl-8 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-600 text-slate-200 text-xs font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none appearance-none cursor-pointer hover:bg-slate-700 transition-colors"
+                  className="pl-8 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-600 text-slate-200 text-xs font-medium focus:border-blue-500 outline-none"
                 >
-                  <option value="expiryDate">Expiración (Fecha)</option>
-                  <option value="name">Nombre (A-Z)</option>
+                  <option value="expiryDate">Expiración</option>
+                  <option value="name">Nombre</option>
                   <option value="platform">Plataforma</option>
                 </select>
               </div>
@@ -1208,12 +1103,11 @@ export default function App() {
                   const isExpired = daysRemaining < 0;
                   const isExpiringSoon =
                     daysRemaining >= 0 && daysRemaining <= 5;
-                  // Buscar plataforma en la lista personalizada del usuario
                   const platformObj = userPlatforms.find(
                     (p) => p.id === client.platform
                   );
                   const platformColor = platformObj?.color || "bg-slate-600";
-                  const platformName = platformObj?.name || client.platform; // Nombre real para display
+                  const platformName = platformObj?.name || client.platform;
 
                   return (
                     <tr
@@ -1223,14 +1117,14 @@ export default function App() {
                       <td className="px-4 py-3 align-middle">
                         <div className="flex justify-center items-center">
                           {isExpired ? (
-                            <div className="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"></div>
+                            <div className="w-3 h-3 rounded-full bg-rose-500 shadow-rose"></div>
                           ) : isExpiringSoon ? (
                             <div className="flex items-center gap-1">
-                              <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
+                              <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
                               <AlertCircle className="w-4 h-4 text-yellow-400 animate-pulse" />
                             </div>
                           ) : (
-                            <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
+                            <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-emerald"></div>
                           )}
                         </div>
                       </td>
@@ -1271,67 +1165,96 @@ export default function App() {
                       </td>
                       <td className="px-4 py-3 align-middle text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {/* Botón WhatsApp DIRECTO */}
                           <button
                             onClick={() => openWhatsApp(client)}
-                            className="p-1.5 text-emerald-400 bg-emerald-900/20 rounded-lg hover:bg-emerald-900/40 border border-emerald-900/30 transition-colors"
-                            title="Enviar WhatsApp"
+                            className="p-1.5 text-emerald-400 bg-emerald-900/20 rounded-lg hover:bg-emerald-900/40 border border-emerald-900/30 transition-colors group-hover:scale-105"
+                            title="WhatsApp"
                           >
                             <MessageCircle className="w-4 h-4" />
                           </button>
-
                           <div className="w-px h-4 bg-slate-700 mx-1"></div>
-
                           <button
                             onClick={() => openDetailsModal(client)}
                             className="p-1.5 text-blue-400 bg-blue-900/20 rounded-lg hover:bg-blue-900/40 border border-blue-900/30 transition-colors group-hover:scale-105"
-                            title="Ver Detalles Completos"
+                            title="Ver Detalles"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-
                           <button
                             onClick={() => handleOpenRenewalModal(client)}
-                            title="Renovar Suscripción"
+                            title="Renovar"
                             className="p-1.5 text-purple-400 bg-purple-900/20 rounded-lg hover:bg-purple-900/40 transition-colors"
                           >
                             <RefreshCw className="w-4 h-4" />
                           </button>
-
-                          {/* ELIMINADO EL LÁPIZ (EDITAR) DE AQUÍ */}
-
-                          <button
-                            onClick={() => handleDelete(client.id)}
-                            className="p-1.5 text-rose-400 hover:text-rose-300 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!viewingAsUser && (
+                            <button
+                              onClick={() => handleDelete(client.id)}
+                              className="p-1.5 text-rose-400 hover:text-rose-300 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
                   );
                 })}
-                {filteredClients.length === 0 && (
-                  <tr>
-                    <td colSpan="7" className="px-4 py-12 text-center">
-                      <div className="flex flex-col items-center justify-center gap-2 text-slate-500">
-                        <Search className="w-10 h-10 opacity-20" />
-                        <p className="text-sm">No se encontraron clientes.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
 
-      {/* --- MODAL CONFIGURACIÓN (PLATAFORMAS Y MENSAJES) --- */}
+      {/* --- MODAL ADMIN --- */}
+      {showAdminPanel && isAdmin && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-700 overflow-hidden h-[80vh] flex flex-col">
+            <div className="p-5 border-b border-slate-800 flex justify-between items-center">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Shield className="w-5 h-5 text-amber-500" /> Panel de
+                Administración
+              </h3>
+              <button onClick={() => setShowAdminPanel(false)}>
+                <X className="w-5 h-5 text-slate-500 hover:text-white" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {allUsers.map((u) => (
+                  <div
+                    key={u.id}
+                    className="bg-slate-800 p-4 rounded-xl border border-slate-700 hover:border-blue-500 cursor-pointer transition-all"
+                    onClick={() => {
+                      setViewingAsUser(u);
+                      setShowAdminPanel(false);
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="bg-blue-900/30 p-2 rounded-lg text-blue-400">
+                        <User className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-sm">
+                          {u.email}
+                        </p>
+                        <p className="text-slate-500 text-xs">
+                          ID: {u.id.slice(0, 8)}...
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200 h-[85vh] flex flex-col">
-            {/* Header */}
             <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
               <div className="flex items-center gap-3">
                 <div className="bg-slate-700 p-2 rounded-lg text-slate-300">
@@ -1351,15 +1274,13 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            {/* Tabs */}
             <div className="flex border-b border-slate-800">
               <button
                 onClick={() => setSettingsTab("platforms")}
                 className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
                   settingsTab === "platforms"
                     ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/30"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 <div className="flex items-center justify-center gap-2">
@@ -1371,29 +1292,25 @@ export default function App() {
                 className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
                   settingsTab === "messages"
                     ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/30"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 <div className="flex items-center justify-center gap-2">
-                  <MessageSquare className="w-4 h-4" /> Mensajes WhatsApp
+                  <MessageSquare className="w-4 h-4" /> Mensajes
                 </div>
               </button>
             </div>
-
-            {/* Contenido Scrollable */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* TAB PLATAFORMAS */}
-              {settingsTab === "platforms" && (
+              {settingsTab === "platforms" ? (
                 <div className="space-y-6">
-                  {/* Agregar Nueva */}
                   <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
                     <label className="block text-xs font-bold text-slate-400 mb-3 uppercase">
-                      Agregar Nueva Plataforma
+                      Agregar Nueva
                     </label>
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Nombre (ej: NETFLIX)"
+                        placeholder="Nombre"
                         className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 text-white text-sm focus:border-blue-500 outline-none uppercase"
                         value={newPlatformName}
                         onChange={(e) => setNewPlatformName(e.target.value)}
@@ -1411,228 +1328,127 @@ export default function App() {
                       </select>
                       <button
                         onClick={handleAddPlatform}
-                        className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors"
+                        className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg"
                       >
                         <Plus className="w-5 h-5" />
                       </button>
                     </div>
                   </div>
-
-                  {/* Lista Existente con Edición */}
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-500 mb-3 uppercase">
-                      Plataformas Activas
-                    </h4>
-                    <div className="space-y-2">
-                      {userPlatforms.map((plat) => (
-                        <div
-                          key={plat.id}
-                          className="flex items-center justify-between bg-slate-800 p-3 rounded-lg border border-slate-700 group hover:border-slate-600 transition-colors"
-                        >
-                          {editingPlatform?.id === plat.id ? (
-                            // MODO EDICIÓN
-                            <div className="flex gap-2 w-full items-center">
-                              <input
-                                type="text"
-                                className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs uppercase"
-                                value={editingPlatform.name}
-                                onChange={(e) =>
-                                  setEditingPlatform({
-                                    ...editingPlatform,
-                                    name: e.target.value,
-                                  })
-                                }
-                              />
-                              <select
-                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs"
-                                value={editingPlatform.color}
-                                onChange={(e) =>
-                                  setEditingPlatform({
-                                    ...editingPlatform,
-                                    color: e.target.value,
-                                  })
-                                }
-                              >
-                                {AVAILABLE_COLORS.map((c) => (
-                                  <option key={c.class} value={c.class}>
-                                    {c.name}
-                                  </option>
-                                ))}
-                              </select>
+                  <div className="space-y-2">
+                    {userPlatforms.map((plat) => (
+                      <div
+                        key={plat.id}
+                        className="flex items-center justify-between bg-slate-800 p-3 rounded-lg border border-slate-700 group hover:border-slate-600"
+                      >
+                        {editingPlatform?.id === plat.id ? (
+                          <div className="flex gap-2 w-full items-center">
+                            <input
+                              type="text"
+                              className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs uppercase"
+                              value={editingPlatform.name}
+                              onChange={(e) =>
+                                setEditingPlatform({
+                                  ...editingPlatform,
+                                  name: e.target.value,
+                                })
+                              }
+                            />
+                            <select
+                              className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs"
+                              value={editingPlatform.color}
+                              onChange={(e) =>
+                                setEditingPlatform({
+                                  ...editingPlatform,
+                                  color: e.target.value,
+                                })
+                              }
+                            >
+                              {AVAILABLE_COLORS.map((c) => (
+                                <option key={c.class} value={c.class}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={saveEditedPlatform}
+                              className="text-emerald-400 p-1"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={cancelEditingPlatform}
+                              className="text-rose-400 p-1"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-4 h-4 rounded-full ${plat.color}`}
+                              ></div>
+                              <span className="font-bold text-white text-sm">
+                                {plat.name}
+                              </span>
+                            </div>
+                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
-                                onClick={saveEditedPlatform}
-                                className="text-emerald-400 hover:text-emerald-300 p-1"
+                                onClick={() => startEditingPlatform(plat)}
+                                className="text-slate-500 hover:text-blue-400 p-1"
                               >
-                                <CheckCircle className="w-4 h-4" />
+                                <Edit2 className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={cancelEditingPlatform}
-                                className="text-rose-400 hover:text-rose-300 p-1"
+                                onClick={() => handleDeletePlatform(plat.id)}
+                                className="text-slate-500 hover:text-rose-400 p-1"
                               >
-                                <X className="w-4 h-4" />
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
-                          ) : (
-                            // MODO VISUALIZACIÓN
-                            <>
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className={`w-4 h-4 rounded-full ${plat.color}`}
-                                ></div>
-                                <span className="font-bold text-white text-sm">
-                                  {plat.name}
-                                </span>
-                              </div>
-                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={() => startEditingPlatform(plat)}
-                                  className="text-slate-500 hover:text-blue-400 p-1 rounded-md transition-colors"
-                                  title="Editar"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePlatform(plat.id)}
-                                  className="text-slate-500 hover:text-rose-400 p-1 rounded-md transition-colors"
-                                  title="Eliminar"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )}
-
-              {/* TAB MENSAJES */}
-              {settingsTab === "messages" && (
-                <div className="space-y-6">
-                  <div className="bg-blue-900/20 border border-blue-900/50 p-4 rounded-lg mb-4">
-                    <h4 className="text-blue-300 font-bold text-sm mb-2 flex items-center gap-2">
-                      <Activity className="w-4 h-4" /> Variables Disponibles
-                    </h4>
-                    <p className="text-xs text-slate-300 leading-relaxed mb-2">
-                      Usa estas "palabras mágicas" en tus mensajes y se
-                      reemplazarán automáticamente:
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="px-2 py-1 bg-blue-900/30 border border-blue-800 rounded text-xs font-mono text-blue-200">{`{nombre}`}</span>
-                      <span className="px-2 py-1 bg-blue-900/30 border border-blue-800 rounded text-xs font-mono text-blue-200">{`{plataforma}`}</span>
-                      <span className="px-2 py-1 bg-blue-900/30 border border-blue-800 rounded text-xs font-mono text-blue-200">{`{fecha}`}</span>
-                      <span className="px-2 py-1 bg-blue-900/30 border border-blue-800 rounded text-xs font-mono text-blue-200">{`{usuario}`}</span>
-                      <span className="px-2 py-1 bg-blue-900/30 border border-blue-800 rounded text-xs font-mono text-blue-200">{`{dias}`}</span>
+              ) : (
+                <div className="space-y-5">
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                    <div className="mb-2">
+                      <label className="text-sm font-bold text-yellow-400">
+                        Vence Mañana
+                      </label>
                     </div>
+                    <VariableToolbar
+                      onInsert={(v) =>
+                        insertIntoTemplate("reminderTomorrow", v)
+                      }
+                    />
+                    <textarea
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-yellow-500 outline-none min-h-[80px]"
+                      value={userTemplates.reminderTomorrow}
+                      onChange={(e) =>
+                        handleUpdateTemplate("reminderTomorrow", e.target.value)
+                      }
+                    />
                   </div>
-
-                  <div className="space-y-5">
-                    {/* Recordatorio Mañana */}
-                    <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                      <div className="flex justify-between items-center mb-2">
-                        <label className="text-sm font-bold text-yellow-400 flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4" /> Vence Mañana (1
-                          día)
-                        </label>
-                      </div>
-                      <VariableToolbar
-                        onInsert={(v) =>
-                          insertIntoTemplate("reminderTomorrow", v)
-                        }
-                      />
-                      <textarea
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none min-h-[80px]"
-                        value={userTemplates.reminderTomorrow}
-                        onChange={(e) =>
-                          handleUpdateTemplate(
-                            "reminderTomorrow",
-                            e.target.value
-                          )
-                        }
-                      />
+                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                    <div className="mb-2">
+                      <label className="text-sm font-bold text-rose-400">
+                        Vencido
+                      </label>
                     </div>
-
-                    {/* Por Vencer */}
-                    <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                      <div className="flex justify-between items-center mb-2">
-                        <label className="text-sm font-bold text-blue-400 flex items-center gap-2">
-                          <Activity className="w-4 h-4" /> Por Vencer (≤ 5 días)
-                        </label>
-                      </div>
-                      <VariableToolbar
-                        onInsert={(v) => insertIntoTemplate("expiringSoon", v)}
-                      />
-                      <textarea
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none min-h-[80px]"
-                        value={userTemplates.expiringSoon}
-                        onChange={(e) =>
-                          handleUpdateTemplate("expiringSoon", e.target.value)
-                        }
-                      />
-                    </div>
-
-                    {/* Ya Vencido */}
-                    <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                      <div className="flex justify-between items-center mb-2">
-                        <label className="text-sm font-bold text-rose-400 flex items-center gap-2">
-                          <X className="w-4 h-4" /> Ya Vencido (Hoy o antes)
-                        </label>
-                      </div>
-                      <VariableToolbar
-                        onInsert={(v) => insertIntoTemplate("expired", v)}
-                      />
-                      <textarea
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none min-h-[80px]"
-                        value={userTemplates.expired}
-                        onChange={(e) =>
-                          handleUpdateTemplate("expired", e.target.value)
-                        }
-                      />
-                    </div>
-
-                    {/* Recuperación */}
-                    <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                      <div className="flex justify-between items-center mb-2">
-                        <label className="text-sm font-bold text-purple-400 flex items-center gap-2">
-                          <RefreshCw className="w-4 h-4" /> Recuperación (Hace
-                          15 días)
-                        </label>
-                      </div>
-                      <VariableToolbar
-                        onInsert={(v) =>
-                          insertIntoTemplate("recovery15Days", v)
-                        }
-                      />
-                      <textarea
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none min-h-[80px]"
-                        value={userTemplates.recovery15Days}
-                        onChange={(e) =>
-                          handleUpdateTemplate("recovery15Days", e.target.value)
-                        }
-                      />
-                    </div>
-
-                    {/* Activo */}
-                    <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                      <div className="flex justify-between items-center mb-2">
-                        <label className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4" /> Activo (Datos de
-                          cuenta)
-                        </label>
-                      </div>
-                      <VariableToolbar
-                        onInsert={(v) => insertIntoTemplate("active", v)}
-                      />
-                      <textarea
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none min-h-[80px]"
-                        value={userTemplates.active}
-                        onChange={(e) =>
-                          handleUpdateTemplate("active", e.target.value)
-                        }
-                      />
-                    </div>
+                    <VariableToolbar
+                      onInsert={(v) => insertIntoTemplate("expired", v)}
+                    />
+                    <textarea
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-rose-500 outline-none min-h-[80px]"
+                      value={userTemplates.expired}
+                      onChange={(e) =>
+                        handleUpdateTemplate("expired", e.target.value)
+                      }
+                    />
                   </div>
                 </div>
               )}
@@ -1641,224 +1457,132 @@ export default function App() {
         </div>
       )}
 
-      {/* --- MODAL RENOVACIÓN --- */}
+      {/* Renovación */}
       {renewingClient && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
-              <div className="flex items-center gap-3">
-                <div className="bg-emerald-600/20 p-2 rounded-lg text-emerald-500">
-                  <RefreshCw className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-white">Renovar Suscripción</h3>
-                  <p className="text-xs text-slate-400">
-                    Cliente: {renewingClient.name}
-                  </p>
-                </div>
-              </div>
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 p-6">
+            <h3 className="text-white font-bold mb-4">
+              Renovar a {renewingClient.name}
+            </h3>
+            <input
+              type="date"
+              className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white mb-4 [color-scheme:dark]"
+              value={renewalData.newExpiryDate}
+              onChange={(e) =>
+                setRenewalData({
+                  ...renewalData,
+                  newExpiryDate: e.target.value,
+                })
+              }
+            />
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              <button
+                onClick={() => applyRenewalPreset(1)}
+                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700"
+              >
+                +1 Mes
+              </button>
+              <button
+                onClick={() => applyRenewalPreset(3)}
+                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700"
+              >
+                +3 Meses
+              </button>
+              <button
+                onClick={() => applyRenewalPreset(6)}
+                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700"
+              >
+                +6 Meses
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmRenewal}
+                className="flex-1 bg-emerald-600 text-white p-3 rounded font-bold"
+              >
+                Confirmar
+              </button>
               <button
                 onClick={() => setRenewingClient(null)}
-                className="text-slate-500 hover:text-white"
+                className="flex-1 bg-slate-700 text-white p-3 rounded"
               >
-                <X className="w-5 h-5" />
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detalles */}
+      {viewDetailsClient && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-start bg-gradient-to-r from-blue-900 to-slate-900">
+              <div>
+                <h2 className="text-2xl font-bold text-white">
+                  {viewDetailsClient.name}
+                </h2>
+                <p className="text-blue-200">{viewDetailsClient.platform}</p>
+              </div>
+              <button onClick={closeDetailsModal}>
+                <X className="w-6 h-6 text-white/70 hover:text-white" />
               </button>
             </div>
             <div className="p-6 space-y-6">
-              <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 text-sm">
-                <p className="text-slate-400 mb-1">
-                  Fecha de vencimiento actual:
-                </p>
-                <div className="flex items-center gap-2 text-white font-mono">
-                  <Calendar className="w-4 h-4 text-slate-500" />
-                  {formatDate(renewingClient.expiryDate)}
-                  {renewalData.isReactivation && (
-                    <span className="text-xs bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded ml-auto">
-                      Vencido
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
-                  Nueva Fecha de Expiración
-                </label>
-                <input
-                  type="date"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 px-4 text-white text-lg font-bold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none [color-scheme:dark]"
-                  value={renewalData.newExpiryDate}
-                  onChange={(e) =>
-                    setRenewalData({
-                      ...renewalData,
-                      newExpiryDate: e.target.value,
-                    })
-                  }
-                />
-                <p className="text-xs text-slate-500 mt-2">
-                  {renewalData.isReactivation
-                    ? "Calculado desde HOY (Reactivación)"
-                    : "Calculado desde su vencimiento anterior (Continuidad)"}
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => applyRenewalPreset(1)}
-                  className="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 rounded-lg text-sm font-medium transition-all"
-                >
-                  +1 Mes
-                </button>
-                <button
-                  onClick={() => applyRenewalPreset(3)}
-                  className="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-blue-500/50 text-slate-300 hover:text-blue-400 rounded-lg text-sm font-medium transition-all"
-                >
-                  +3 Meses
-                </button>
-                <button
-                  onClick={() => applyRenewalPreset(6)}
-                  className="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-purple-500/50 text-slate-300 hover:text-purple-400 rounded-lg text-sm font-medium transition-all"
-                >
-                  +6 Meses
-                </button>
-              </div>
-              <button
-                onClick={confirmRenewal}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                Confirmar Renovación
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL DETALLES (El Ojito) --- */}
-      {viewDetailsClient && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="relative h-24 bg-gradient-to-r from-blue-900 to-slate-900 p-6 flex justify-between items-start">
-              <div className="flex items-center gap-4">
-                <div
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                    userPlatforms.find(
-                      (p) => p.id === viewDetailsClient.platform
-                    )?.color || "bg-slate-700"
-                  }`}
-                >
-                  <Monitor className="w-6 h-6 text-white" />
-                </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <h2 className="text-xl font-bold text-white">
-                    {viewDetailsClient.name}
-                  </h2>
-                  <p className="text-blue-200 text-sm font-mono">
+                  <p className="text-slate-500 text-xs uppercase font-bold">
+                    Usuario
+                  </p>
+                  <p className="text-white text-lg">
                     {viewDetailsClient.username}
                   </p>
                 </div>
-              </div>
-              <button
-                onClick={closeDetailsModal}
-                className="text-white/50 hover:text-white bg-white/10 hover:bg-white/20 p-1 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <DetailItem
-                  icon={<Tv className="w-4 h-4" />}
-                  label="Plataforma"
-                  value={viewDetailsClient.platform}
-                />
-                <DetailItem
-                  icon={<Hash className="w-4 h-4" />}
-                  label="ID Sistema"
-                  value={viewDetailsClient.customId || "N/A"}
-                />
-                <DetailItem
-                  icon={<Activity className="w-4 h-4" />}
-                  label="Estado"
-                  value={
-                    getDaysRemaining(viewDetailsClient.expiryDate) < 0
-                      ? "Vencido"
-                      : "Activo"
-                  }
-                  valueColor={
-                    getDaysRemaining(viewDetailsClient.expiryDate) < 0
-                      ? "text-red-400"
-                      : "text-emerald-400"
-                  }
-                />
-              </div>
-              <div className="h-px bg-slate-700 my-2"></div>
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Detalles de Suscripción
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1">
-                    <Calendar className="w-4 h-4" />{" "}
-                    <span className="text-xs font-semibold uppercase">
-                      Inicio
-                    </span>
-                  </div>
-                  <p className="text-white font-medium">
-                    {formatDate(viewDetailsClient.startDate)}
+                <div>
+                  <p className="text-slate-500 text-xs uppercase font-bold">
+                    Contraseña
                   </p>
+                  <p className="text-white text-lg">••••••</p>
                 </div>
-                <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1">
-                    <AlertCircle className="w-4 h-4" />{" "}
-                    <span className="text-xs font-semibold uppercase">
-                      Expiración
-                    </span>
-                  </div>
-                  <p className="text-white font-medium text-lg">
+                <div>
+                  <p className="text-slate-500 text-xs uppercase font-bold">
+                    Expiración
+                  </p>
+                  <p
+                    className={`text-lg font-bold ${
+                      getDaysRemaining(viewDetailsClient.expiryDate) < 0
+                        ? "text-rose-400"
+                        : "text-emerald-400"
+                    }`}
+                  >
                     {formatDate(viewDetailsClient.expiryDate)}
                   </p>
                 </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-700/30 p-3 rounded-lg flex items-center justify-between border border-slate-700/30">
-                  <span className="text-slate-400 text-sm">Conexiones</span>
-                  <span className="text-white font-bold flex items-center gap-2">
-                    <Wifi className="w-4 h-4 text-blue-400" />{" "}
-                    {viewDetailsClient.connections}
-                  </span>
-                </div>
-                <div className="bg-slate-700/30 p-3 rounded-lg flex items-center justify-between border border-slate-700/30">
-                  <span className="text-slate-400 text-sm">Contrataciones</span>
-                  <span className="text-white font-bold flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4 text-green-400" />{" "}
-                    {viewDetailsClient.renewals}
-                  </span>
-                </div>
-                <div
-                  className="bg-slate-700/30 p-3 rounded-lg flex items-center justify-between border border-slate-700/30 cursor-pointer hover:bg-slate-700/50 transition-colors"
-                  onClick={() => openWhatsApp(viewDetailsClient)}
-                >
-                  <span className="text-slate-400 text-sm">Contacto</span>
-                  <span className="text-white font-bold flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-emerald-400" />{" "}
-                    {viewDetailsClient.contact || "-"}
-                  </span>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase font-bold">
+                    Contacto
+                  </p>
+                  <p className="text-white text-lg">
+                    {viewDetailsClient.contact}
+                  </p>
                 </div>
               </div>
-              <div className="flex gap-3 mt-4 pt-4 border-t border-slate-700">
+              <div className="flex gap-3 pt-4 border-t border-slate-800">
                 <button
                   onClick={() => {
                     closeDetailsModal();
                     handleOpenRenewalModal(viewDetailsClient);
                   }}
-                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"
+                  className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold"
                 >
-                  Renovar Ahora
+                  Renovar
                 </button>
                 <button
                   onClick={() => {
                     closeDetailsModal();
                     openModal(viewDetailsClient);
                   }}
-                  className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-lg font-bold"
                 >
                   Editar
                 </button>
@@ -1868,160 +1592,76 @@ export default function App() {
         </div>
       )}
 
-      {/* --- MODAL NOTIFICACIONES (Ventana Flotante) --- */}
+      {/* Notificaciones */}
       {showNotifications && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
-              <h3 className="font-bold text-white flex items-center gap-2">
-                <Bell className="w-5 h-5 text-blue-500" /> Notificaciones
-                Pendientes
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+              <h3 className="text-white font-bold flex items-center gap-2">
+                <Bell className="w-5 h-5" /> Notificaciones
               </h3>
-              <button
-                onClick={() => setShowNotifications(false)}
-                className="text-slate-500 hover:text-white"
-              >
-                <X className="w-5 h-5" />
+              <button onClick={() => setShowNotifications(false)}>
+                <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
-            <div className="max-h-[60vh] overflow-y-auto">
-              {pendingNotifications.length === 0 ? (
-                <div className="p-8 text-center text-slate-500 text-sm flex flex-col items-center gap-2">
-                  <CheckCircle className="w-10 h-10 opacity-30 mb-2" />
-                  <p>¡Todo al día! No hay alertas hoy.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-800">
-                  {pendingNotifications.map((client) => {
-                    const days = getDaysRemaining(client.expiryDate);
-                    const isUrgent = days === 1;
-                    const isCompleted = completedTasks.includes(client.id);
-
-                    return (
-                      <div
-                        key={client.id}
-                        className={`p-4 transition-colors ${
-                          isCompleted
-                            ? "bg-slate-900/50 opacity-60"
-                            : "hover:bg-slate-800/50"
-                        }`}
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <p
-                              className={`font-bold text-sm ${
-                                isCompleted
-                                  ? "text-slate-400 line-through"
-                                  : "text-white"
-                              }`}
-                            >
-                              {client.name}
-                            </p>
-                            <p className="text-slate-400 text-xs mt-0.5">
-                              {client.platform} • {client.contact}
-                            </p>
-                          </div>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-1 rounded uppercase border ${
-                              isUrgent
-                                ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
-                                : "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                            }`}
-                          >
-                            {isUrgent ? "Vence Mañana" : "Recuperación"}
-                          </span>
-                        </div>
-
-                        <div className="flex gap-2">
-                          {client.contact ? (
-                            <button
-                              onClick={() =>
-                                openWhatsApp(
-                                  client,
-                                  isUrgent
-                                    ? "reminderTomorrow"
-                                    : "recovery15Days"
-                                )
-                              }
-                              disabled={isCompleted}
-                              className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                                isCompleted
-                                  ? "bg-slate-800 text-slate-500 cursor-not-allowed"
-                                  : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:scale-[1.02]"
-                              }`}
-                            >
-                              <MessageCircle className="w-4 h-4" />
-                              {isCompleted
-                                ? "Completado"
-                                : "Enviar mensaje de WhatsApp"}
-                            </button>
-                          ) : (
-                            <div className="flex-1 text-xs text-slate-600 text-center italic p-2 bg-slate-900 rounded border border-slate-800">
-                              Sin contacto
-                            </div>
-                          )}
-
-                          <button
-                            onClick={() => toggleCompleteTask(client.id)}
-                            className={`p-2 rounded-lg border transition-all ${
-                              isCompleted
-                                ? "bg-blue-600 text-white border-blue-600"
-                                : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
-                            }`}
-                            title={
-                              isCompleted
-                                ? "Marcar como pendiente"
-                                : "Marcar como completado"
-                            }
-                          >
-                            {isCompleted ? (
-                              <CheckSquare className="w-4 h-4" />
-                            ) : (
-                              <Square className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+            <div className="p-4 max-h-[60vh] overflow-y-auto space-y-2">
+              {pendingNotifications.length === 0 && (
+                <p className="text-center text-slate-500 py-4">
+                  Sin notificaciones pendientes.
+                </p>
               )}
-            </div>
-            <div className="p-4 bg-slate-900 border-t border-slate-800 text-center">
-              <button
-                onClick={() => setShowNotifications(false)}
-                className="text-slate-500 text-xs hover:text-white transition-colors"
-              >
-                Cerrar
-              </button>
+              {pendingNotifications.map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-slate-800 p-3 rounded border border-slate-700 flex justify-between items-center"
+                >
+                  <div>
+                    <p className="text-white font-bold text-sm">{c.name}</p>
+                    <p className="text-slate-400 text-xs">
+                      Vence: {formatDate(c.expiryDate)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => toggleCompleteTask(c.id)}
+                    className={`p-2 rounded ${
+                      completedTasks.includes(c.id)
+                        ? "text-emerald-400"
+                        : "text-slate-500"
+                    }`}
+                  >
+                    {completedTasks.includes(c.id) ? (
+                      <CheckSquare className="w-5 h-5" />
+                    ) : (
+                      <Square className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* --- MODAL EDICIÓN/CREACIÓN --- */}
+      {/* Nuevo/Editar Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200 border border-slate-700">
-            <div className="px-6 py-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="font-bold text-lg text-white">
-                {editingClient ? "Editar Cliente" : "Nuevo Registro"}
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-white">
+                {editingClient ? "Editar Cliente" : "Nuevo Cliente"}
               </h3>
-              <button
-                onClick={closeModal}
-                className="text-slate-500 hover:text-white transition-colors"
-              >
-                ✕
+              <button onClick={closeModal}>
+                <X className="w-6 h-6 text-slate-500" />
               </button>
             </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <form onSubmit={handleSave} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    Plataforma
+                  <label className="block text-xs text-slate-400 mb-1">
+                    PLATAFORMA
                   </label>
                   <select
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white"
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
                     value={formData.platform}
                     onChange={(e) =>
                       setFormData({ ...formData, platform: e.target.value })
@@ -2035,14 +1675,13 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    Usuario / ID
+                  <label className="block text-xs text-slate-400 mb-1">
+                    USUARIO
                   </label>
                   <input
                     type="text"
                     required
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
-                    placeholder="Ej. USER123"
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
                     value={formData.username}
                     onChange={(e) =>
                       setFormData({ ...formData, username: e.target.value })
@@ -2050,46 +1689,28 @@ export default function App() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    Nombre Cliente
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
-                    placeholder="Nombre completo"
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    ID Personalizado
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
-                    placeholder="Opcional"
-                    value={formData.customId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, customId: e.target.value })
-                    }
-                  />
-                </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  NOMBRE
+                </label>
+                <input
+                  type="text"
+                  required
+                  className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    WhatsApp
+                  <label className="block text-xs text-slate-400 mb-1">
+                    CONTACTO
                   </label>
                   <input
-                    type="tel"
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white placeholder-slate-600"
-                    placeholder="Solo números"
+                    type="text"
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
                     value={formData.contact}
                     onChange={(e) =>
                       setFormData({ ...formData, contact: e.target.value })
@@ -2097,13 +1718,12 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
-                    Dispositivos
+                  <label className="block text-xs text-slate-400 mb-1">
+                    CONEXIONES
                   </label>
                   <input
                     type="number"
-                    min="1"
-                    className="w-full rounded-lg border-slate-600 bg-slate-900 py-2 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-900 transition-all outline-none text-white"
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
                     value={formData.connections}
                     onChange={(e) =>
                       setFormData({
@@ -2114,29 +1734,29 @@ export default function App() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div className="bg-slate-900 p-3 rounded-lg border border-slate-600">
-                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">
-                    Inicio
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">
+                    INICIO
                   </label>
                   <input
                     type="date"
                     required
-                    className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 text-slate-300 [color-scheme:dark]"
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white [color-scheme:dark]"
                     value={formData.startDate}
                     onChange={(e) =>
                       setFormData({ ...formData, startDate: e.target.value })
                     }
                   />
                 </div>
-                <div className="bg-blue-900/20 p-3 rounded-lg border border-blue-900/30">
-                  <label className="block text-xs font-bold text-blue-400 mb-1.5 uppercase">
-                    Vencimiento
+                <div>
+                  <label className="block text-xs text-blue-400 mb-1">
+                    EXPIRACIÓN
                   </label>
                   <input
                     type="date"
                     required
-                    className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 text-blue-300 font-bold [color-scheme:dark]"
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white font-bold [color-scheme:dark]"
                     value={formData.expiryDate}
                     onChange={(e) =>
                       setFormData({ ...formData, expiryDate: e.target.value })
@@ -2144,21 +1764,12 @@ export default function App() {
                   />
                 </div>
               </div>
-              <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="flex-1 px-4 py-2.5 bg-slate-700 text-slate-300 font-medium rounded-lg hover:bg-slate-600 transition-colors text-sm border border-slate-600"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-500 shadow-lg shadow-blue-900/30 transition-all transform active:scale-[0.98] text-sm"
-                >
-                  Guardar
-                </button>
-              </div>
+              <button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg mt-4"
+              >
+                Guardar
+              </button>
             </form>
           </div>
         </div>
