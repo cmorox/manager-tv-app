@@ -44,6 +44,8 @@ import {
   FileDown,
   Menu, // Icono para menú móvil si fuera necesario
   MoreVertical,
+  Trash, // Nuevo icono para borrar completados
+  AlertTriangle, // Nuevo icono para alarma de vencidos
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -559,6 +561,7 @@ export default function App() {
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [completedTasks, setCompletedTasks] = useState([]);
+  const [dismissedIds, setDismissedIds] = useState([]); // Estado para notificaciones "borradas"
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortOption, setSortOption] = useState("expiryDate");
   const fileInputRef = useRef(null);
@@ -1086,6 +1089,15 @@ export default function App() {
     );
   };
 
+  // Función para borrar las tareas completadas (agregarlas a la lista de ignoradas)
+  const handleClearCompleted = () => {
+    if (completedTasks.length === 0) return;
+    if (confirm("¿Borrar las notificaciones marcadas como completadas?")) {
+      setDismissedIds((prev) => [...prev, ...completedTasks]);
+      setCompletedTasks([]);
+    }
+  };
+
   const filteredClients = useMemo(() => {
     let result = clients.filter((c) => {
       const days = getDaysRemaining(c.expiryDate);
@@ -1125,14 +1137,33 @@ export default function App() {
 
   const pendingNotifications = useMemo(() => {
     if (!clients.length) return [];
+
     return clients.filter((client) => {
+      // Si el cliente ya fue borrado de las notificaciones, lo ignoramos
+      if (dismissedIds.includes(client.id)) return false;
+
       const days = getDaysRemaining(client.expiryDate);
+
+      // LOGICA 1: Seguimiento (Estricto 15 días)
       if (days === 15 && userNotificationPrefs.checkIn15Days) return true;
-      if (days === 1 && userNotificationPrefs.reminderTomorrow) return true;
+
+      // LOGICA 2: Urgencia / Vencidos (Persistente desde 1 día antes hacia atrás)
+      // Si userNotificationPrefs.reminderTomorrow está activo, mostramos
+      // todos los que tengan 1 día o menos (incluyendo vencidos).
+      if (days <= 1 && userNotificationPrefs.reminderTomorrow) return true;
+
+      // LOGICA 3: Recuperación (Estricto -15 días - "Hace 15 días venció")
+      // Nota: Si la lógica 2 ya cubre los vencidos, esta podría duplicarse visualmente
+      // si no tenemos cuidado, pero conceptualmente es una "acción" distinta.
+      // Para evitar duplicados en la lista visual (si la lógica 2 cubre todo <=1),
+      // podemos hacer que la lógica 2 cubra hasta -14 y la lógica 3 tome el relevo en -15.
+      // PERO, el usuario quiere "Vencido" como estatus.
+      // Dejaremos la recuperación separada si queremos un mensaje específico.
       if (days === -15 && userNotificationPrefs.recovery15Days) return true;
+
       return false;
     });
-  }, [clients, userNotificationPrefs]);
+  }, [clients, userNotificationPrefs, dismissedIds]);
 
   const activeNotificationsCount = pendingNotifications.filter(
     (n) => !completedTasks.includes(n.id)
@@ -1860,7 +1891,7 @@ export default function App() {
                         Alerta de Urgencia
                       </h4>
                       <p className="text-slate-400 text-xs mt-1">
-                        Avisar 1 día antes del vencimiento.
+                        Avisar desde 1 día antes y mantener si vence.
                       </p>
                     </div>
                     <button
@@ -2175,37 +2206,73 @@ export default function App() {
       {showNotifications && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden h-[80vh] flex flex-col">
-            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900 shrink-0">
-              <h3 className="text-white font-bold flex items-center gap-2">
-                <Bell className="w-5 h-5" /> Notificaciones
-              </h3>
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900 shrink-0 gap-3">
+              <div className="flex-1">
+                <h3 className="text-white font-bold flex items-center gap-2">
+                  <Bell className="w-5 h-5" /> Notificaciones
+                </h3>
+              </div>
+
+              {/* Nuevo Botón de Borrar Completados */}
+              {completedTasks.length > 0 && (
+                <button
+                  onClick={handleClearCompleted}
+                  className="text-xs bg-slate-800 hover:bg-rose-900/40 text-rose-400 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-rose-500/30 transition-all flex items-center gap-1.5"
+                >
+                  <Trash className="w-3.5 h-3.5" />
+                  Borrar ({completedTasks.length})
+                </button>
+              )}
+
               <button onClick={() => setShowNotifications(false)}>
-                <X className="w-5 h-5 text-slate-500" />
+                <X className="w-5 h-5 text-slate-500 hover:text-white" />
               </button>
             </div>
+
             <div className="p-4 overflow-y-auto space-y-2 flex-1">
               {pendingNotifications.length === 0 && (
-                <p className="text-center text-slate-500 py-4">
-                  Sin notificaciones pendientes.
-                </p>
+                <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
+                  <CheckCircle className="w-12 h-12 opacity-20" />
+                  <p>¡Todo al día!</p>
+                  <p className="text-xs text-slate-600 text-center px-4">
+                    No tienes alertas pendientes. Las tareas completadas se han
+                    limpiado.
+                  </p>
+                </div>
               )}
               {pendingNotifications.map((c) => {
                 const days = getDaysRemaining(c.expiryDate);
-                // Determinar tipo de alerta
+
+                // Determinar tipo de alerta dinámico
                 let type = "reminderTomorrow";
                 let label = "Vence Mañana";
                 let style =
                   "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
+                let Icon = AlertCircle;
 
                 if (days === 15) {
                   type = "checkIn15Days";
                   label = "Seguimiento";
                   style = "bg-blue-500/10 text-blue-400 border-blue-500/20";
+                  Icon = HelpCircle;
                 } else if (days === -15) {
                   type = "recoveryLost";
                   label = "Recuperación";
                   style =
                     "bg-purple-500/10 text-purple-400 border-purple-500/20";
+                  Icon = HeartHandshake;
+                } else if (days <= 0) {
+                  // Lógica para vencidos HOY o ANTES
+                  if (days === 0) {
+                    label = "Vence HOY";
+                    style =
+                      "bg-orange-500/10 text-orange-400 border-orange-500/20 animate-pulse";
+                  } else {
+                    label = "VENCIDO";
+                    style =
+                      "bg-rose-500/10 text-rose-400 border-rose-500/20 font-bold";
+                    Icon = AlertTriangle; // Icono de alarma para vencidos
+                  }
                 }
 
                 const isCompleted = completedTasks.includes(c.id);
@@ -2213,9 +2280,9 @@ export default function App() {
                 return (
                   <div
                     key={c.id}
-                    className={`p-4 transition-colors rounded border border-slate-700 ${
+                    className={`p-4 transition-all duration-300 rounded border border-slate-700 ${
                       isCompleted
-                        ? "bg-slate-900/50 opacity-60"
+                        ? "bg-slate-900/30 opacity-50 scale-[0.98]"
                         : "bg-slate-800"
                     }`}
                   >
@@ -2224,7 +2291,7 @@ export default function App() {
                         <p
                           className={`font-bold text-sm ${
                             isCompleted
-                              ? "text-slate-400 line-through"
+                              ? "text-slate-500 line-through"
                               : "text-white"
                           }`}
                         >
@@ -2234,11 +2301,12 @@ export default function App() {
                           {c.platform} • {c.contact}
                         </p>
                       </div>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-1 rounded uppercase border ${style}`}
+                      <div
+                        className={`text-[10px] font-bold px-2 py-1 rounded uppercase border flex items-center gap-1.5 ${style}`}
                       >
+                        <Icon className="w-3 h-3" />
                         {label}
-                      </span>
+                      </div>
                     </div>
 
                     <div className="flex gap-2">
@@ -2248,12 +2316,12 @@ export default function App() {
                           disabled={isCompleted}
                           className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
                             isCompleted
-                              ? "bg-slate-800 text-slate-500 cursor-not-allowed"
+                              ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
                               : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:scale-[1.02]"
                           }`}
                         >
                           <MessageCircle className="w-4 h-4" />
-                          Enviar WhatsApp
+                          WhatsApp
                         </button>
                       ) : (
                         <div className="flex-1 text-xs text-slate-600 text-center italic p-2 bg-slate-900 rounded border border-slate-800">
@@ -2262,15 +2330,15 @@ export default function App() {
                       )}
                       <button
                         onClick={() => toggleCompleteTask(c.id)}
-                        className={`p-2 rounded-lg border transition-all ${
+                        className={`px-3 py-2 rounded-lg border transition-all ${
                           isCompleted
-                            ? "bg-blue-600 text-white border-blue-600"
+                            ? "bg-blue-600/20 text-blue-400 border-blue-600/50 hover:bg-blue-600/30"
                             : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
                         }`}
                         title={
                           isCompleted
-                            ? "Marcar como pendiente"
-                            : "Marcar como completado"
+                            ? "Desmarcar"
+                            : "Marcar como listo (para borrar después)"
                         }
                       >
                         {isCompleted ? (
