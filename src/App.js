@@ -42,7 +42,6 @@ import {
   CreditCard,
   PartyPopper,
   FileDown,
-  Repeat, // Icono para renovaciones
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -190,9 +189,10 @@ const GlobalStyles = () => (
   `}</style>
 );
 
-// --- COMPONENTE BOTÓN CON TOOLTIP (Para botones solo icono) ---
+// --- COMPONENTE BOTÓN CON TOOLTIP CORREGIDO ---
+// Se usa 'group/btn' para aislar el hover del botón del hover de la fila
 const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
-  <div className="relative group flex items-center">
+  <div className="relative group/btn flex items-center">
     <button
       onClick={onClick}
       className={`p-2.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 relative border border-white/5 ${colorClass}`}
@@ -204,14 +204,15 @@ const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
         </span>
       )}
     </button>
-    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-black/90 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[999] border border-slate-700 shadow-xl backdrop-blur-sm">
+    {/* Tooltip aislado con 'group-hover/btn' */}
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-black/90 text-white text-xs font-medium rounded-lg opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[999] border border-slate-700 shadow-xl backdrop-blur-sm">
       {label}
-      <div className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-black/90"></div>
+      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-t-black/90"></div>
     </div>
   </div>
 );
 
-// --- COMPONENTE BOTÓN CON TEXTO (Para botones descriptivos) ---
+// --- COMPONENTE BOTÓN CON TEXTO ---
 const TextNavButton = ({ onClick, icon, label, colorClass }) => (
   <button
     onClick={onClick}
@@ -337,7 +338,7 @@ function LoginScreen() {
               <input
                 type={showPassword ? "text" : "password"}
                 required
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-10 pr-10 text-white focus:border-blue-500 outline-none transition-all placeholder-slate-600"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-4 pr-10 text-white focus:border-blue-500 outline-none transition-all placeholder-slate-600"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -426,7 +427,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [viewDetailsClient, setViewDetailsClient] = useState(null);
-  const [showClientPassword, setShowClientPassword] = useState(false); // FIXED: Only one declaration
+
   const [editingClient, setEditingClient] = useState(null);
   const [renewingClient, setRenewingClient] = useState(null);
   const [renewalData, setRenewalData] = useState({
@@ -1016,6 +1017,8 @@ export default function App() {
     (n) => !completedTasks.includes(n.id)
   ).length;
 
+  const [showClientPassword, setShowClientPassword] = useState(false);
+
   if (authChecking)
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-blue-400">
@@ -1064,7 +1067,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Top Right Controls (Only System buttons) */}
+          {/* Top Right Controls */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
             {isAdmin && !viewingAsUser && (
               <NavButton
@@ -1098,7 +1101,7 @@ export default function App() {
                 <TextNavButton
                   onClick={handleDownloadTemplate}
                   icon={<FileDown className="w-4 h-4 text-emerald-400" />}
-                  label="Bajar Plantilla"
+                  label="Plantilla"
                   colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
                 />
                 <TextNavButton
@@ -1115,16 +1118,16 @@ export default function App() {
                   label="Exportar"
                   colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
                 />
+                <TextNavButton
+                  onClick={handleDeleteAll}
+                  icon={<Trash2 className="w-4 h-4 text-rose-400" />}
+                  label="Borrar"
+                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
+                />
                 <NavButton
                   onClick={() => setShowSettings(true)}
                   icon={<Settings className="w-5 h-5 text-slate-400" />}
                   label="Configuración"
-                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-                />
-                <NavButton
-                  onClick={handleDeleteAll}
-                  icon={<Trash2 className="w-5 h-5 text-rose-400" />}
-                  label="Borrar Todo"
                   colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
                 />
               </>
@@ -1178,7 +1181,7 @@ export default function App() {
         </div>
 
         <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700/50 overflow-hidden">
-          {/* Header Tabla (Lower Bar) - Now contains Search and Add */}
+          {/* Header Tabla (Lower Bar) */}
           <div className="p-4 border-b border-slate-700 bg-slate-800 flex flex-col lg:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-3 flex-1 w-full lg:w-auto">
               {/* Search moved here */}
