@@ -42,6 +42,8 @@ import {
   CreditCard,
   PartyPopper,
   FileDown,
+  Menu, // Icono para menú móvil si fuera necesario
+  MoreVertical,
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
@@ -85,7 +87,13 @@ const firebaseConfig = {
 
 const APP_ID_NEGOCIO = "control-proviewtv";
 
-const app = initializeApp(firebaseConfig);
+let app;
+try {
+  app = initializeApp(firebaseConfig);
+} catch (e) {
+  app = initializeApp(firebaseConfig, "PROVIEW_APP_" + Math.random());
+}
+
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -189,13 +197,14 @@ const GlobalStyles = () => (
   `}</style>
 );
 
-// --- COMPONENTE BOTÓN CON TOOLTIP CORREGIDO ---
-// Se usa 'group/btn' para aislar el hover del botón del hover de la fila
+// --- COMPONENTES UI MEJORADOS PARA MOVIL ---
+
 const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
   <div className="relative group/btn flex items-center">
     <button
       onClick={onClick}
       className={`p-2.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 relative border border-white/5 ${colorClass}`}
+      aria-label={label}
     >
       {icon}
       {badge > 0 && (
@@ -204,24 +213,136 @@ const NavButton = ({ onClick, icon, label, colorClass, badge }) => (
         </span>
       )}
     </button>
-    {/* Tooltip aislado con 'group-hover/btn' */}
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-black/90 text-white text-xs font-medium rounded-lg opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[999] border border-slate-700 shadow-xl backdrop-blur-sm">
+    <div className="absolute top-full right-0 mt-2 px-3 py-1.5 bg-black/90 text-white text-xs font-medium rounded-lg opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[999] border border-slate-700 shadow-xl backdrop-blur-sm hidden md:block">
       {label}
-      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-t-black/90"></div>
     </div>
   </div>
 );
 
-// --- COMPONENTE BOTÓN CON TEXTO ---
+// RESPONSIVE: Oculta el texto en pantallas pequeñas (hidden sm:inline)
 const TextNavButton = ({ onClick, icon, label, colorClass }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 border border-white/5 font-medium text-xs sm:text-sm whitespace-nowrap ${colorClass}`}
+    className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 border border-white/5 font-medium text-xs sm:text-sm whitespace-nowrap ${colorClass}`}
   >
     {icon}
-    <span>{label}</span>
+    <span className="hidden sm:inline">{label}</span>
   </button>
 );
+
+// RESPONSIVE: Tarjeta de Cliente para Móvil
+const MobileClientCard = ({
+  client,
+  platforms,
+  onWhatsApp,
+  onDetails,
+  onRenew,
+  onDelete,
+  isViewOnly,
+}) => {
+  const days = getDaysRemaining(client.expiryDate);
+  const isExpired = days < 0;
+  const isExpiringSoon = days >= 0 && days <= 5;
+  const platformObj = platforms.find((p) => p.id === client.platform);
+  const platformColor = platformObj?.color || "bg-slate-600";
+
+  return (
+    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-sm relative overflow-hidden">
+      {/* Indicador de estado lateral */}
+      <div
+        className={`absolute left-0 top-0 bottom-0 w-1 ${
+          isExpired
+            ? "bg-rose-500"
+            : isExpiringSoon
+            ? "bg-yellow-400"
+            : "bg-emerald-500"
+        }`}
+      ></div>
+
+      <div className="pl-3">
+        <div className="flex justify-between items-start mb-2">
+          <div>
+            <span
+              className={`${platformColor} text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide`}
+            >
+              {client.platform}
+            </span>
+            <h3 className="text-white font-bold text-lg mt-1">{client.name}</h3>
+          </div>
+          <div className="text-right">
+            <p
+              className={`font-bold text-sm ${
+                isExpired
+                  ? "text-rose-400"
+                  : isExpiringSoon
+                  ? "text-yellow-400"
+                  : "text-emerald-400"
+              }`}
+            >
+              {formatDate(client.expiryDate)}
+            </p>
+            <p className="text-[10px] text-slate-500 uppercase font-bold">
+              Vencimiento
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <div className="bg-slate-900/50 p-2 rounded border border-slate-700/50">
+            <p className="text-[10px] text-slate-500 uppercase font-bold">
+              Usuario
+            </p>
+            <p className="text-slate-300 text-xs truncate font-mono">
+              {client.username}
+            </p>
+          </div>
+          <div className="bg-slate-900/50 p-2 rounded border border-slate-700/50">
+            <p className="text-[10px] text-slate-500 uppercase font-bold">
+              Días
+            </p>
+            <p
+              className={`text-xs font-bold ${
+                days < 0 ? "text-rose-400" : "text-slate-300"
+              }`}
+            >
+              {days < 0 ? "VENCIDO" : `${days} días`}
+            </p>
+          </div>
+        </div>
+
+        {/* Botones de acción grandes para dedo */}
+        <div className="grid grid-cols-4 gap-2">
+          <button
+            onClick={() => onWhatsApp(client)}
+            className="bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-600/30 text-emerald-400 rounded-lg p-2 flex items-center justify-center"
+          >
+            <MessageCircle className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => onDetails(client)}
+            className="bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/30 text-blue-400 rounded-lg p-2 flex items-center justify-center"
+          >
+            <Eye className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => onRenew(client)}
+            className="bg-purple-600/20 hover:bg-purple-600/30 border border-purple-600/30 text-purple-400 rounded-lg p-2 flex items-center justify-center"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+          {!isViewOnly && (
+            <button
+              onClick={() => onDelete(client.id)}
+              className="bg-rose-600/20 hover:bg-rose-600/30 border border-rose-600/30 text-rose-400 rounded-lg p-2 flex items-center justify-center"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const VariableToolbar = ({ onInsert }) => (
   <div className="flex flex-wrap gap-2 mb-2">
@@ -1038,118 +1159,135 @@ export default function App() {
         style={{ display: "none" }}
       />
 
-      {/* Navbar */}
-      <div className="bg-slate-800/90 border-b border-slate-700 p-4 sticky top-0 z-20 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-900/20">
-              <Monitor className="w-6 h-6 text-white" />
+      {/* Navbar RESPONSIVE */}
+      <div className="bg-slate-800/90 border-b border-slate-700 p-3 md:p-4 sticky top-0 z-20 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-900/20 shrink-0">
+              <Monitor className="w-5 h-5 md:w-6 md:h-6 text-white" />
             </div>
-            <div>
+            <div className="flex-1 overflow-hidden">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight text-white">
+                <h1 className="text-lg md:text-xl font-bold tracking-tight text-white whitespace-nowrap">
                   Proview TV
                 </h1>
                 {isAdmin ? (
-                  <span className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
-                    <Shield className="w-3 h-3" /> Admin
+                  <span className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 shrink-0">
+                    <Shield className="w-3 h-3" />{" "}
+                    <span className="hidden sm:inline">Admin</span>
                   </span>
                 ) : (
-                  <span className="bg-blue-900/40 text-blue-300 text-[10px] px-1.5 py-0.5 rounded border border-blue-700/30 flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> Privado
+                  <span className="bg-blue-900/40 text-blue-300 text-[10px] px-1.5 py-0.5 rounded border border-blue-700/30 flex items-center gap-1 shrink-0">
+                    <Lock className="w-3 h-3" />{" "}
+                    <span className="hidden sm:inline">Privado</span>
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 truncate w-32 md:w-auto flex items-center gap-1">
+              <p className="text-xs text-slate-400 truncate flex items-center gap-1">
                 <User className="w-3 h-3" />{" "}
                 {viewingAsUser ? `Viendo: ${viewingAsUser.email}` : user.email}
               </p>
             </div>
+
+            {/* Mobile Logout Button (Visible only on very small screens if needed, otherwise part of toolbar) */}
+            <div className="md:hidden">
+              <NavButton
+                onClick={handleLogout}
+                icon={<LogOut className="w-4 h-4 text-rose-400" />}
+                label="Salir"
+                colorClass="bg-slate-800 border-slate-700"
+              />
+            </div>
           </div>
 
-          {/* Top Right Controls */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
-            {isAdmin && !viewingAsUser && (
-              <NavButton
-                onClick={() => setShowAdminPanel(true)}
-                icon={<Shield className="w-5 h-5 text-amber-500" />}
-                label="Admin Panel"
-                colorClass="bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20"
-              />
-            )}
-            {viewingAsUser && (
-              <button
-                onClick={() => setViewingAsUser(null)}
-                className="flex-1 sm:flex-none bg-rose-600 hover:bg-rose-500 text-white px-3 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold shadow-md"
-              >
-                <LogOut className="w-4 h-4" /> Salir de {viewingAsUser.email}
-              </button>
-            )}
-
-            <NavButton
-              onClick={() => setShowNotifications(true)}
-              icon={<Bell className="w-5 h-5 text-white" />}
-              label="Notificaciones"
-              colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-              badge={activeNotificationsCount}
-            />
-
-            <div className="w-px h-6 bg-slate-700 mx-1 hidden sm:block"></div>
-
-            {!viewingAsUser && (
-              <>
-                <TextNavButton
-                  onClick={handleDownloadTemplate}
-                  icon={<FileDown className="w-4 h-4 text-emerald-400" />}
-                  label="Plantilla"
-                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
-                />
-                <TextNavButton
-                  onClick={triggerFileUpload}
-                  icon={
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
-                  }
-                  label="Importar"
-                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
-                />
-                <TextNavButton
-                  onClick={handleExportCSV}
-                  icon={<Download className="w-4 h-4 text-blue-400" />}
-                  label="Exportar"
-                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
-                />
-                <TextNavButton
-                  onClick={handleDeleteAll}
-                  icon={<Trash2 className="w-4 h-4 text-rose-400" />}
-                  label="Borrar"
-                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
-                />
+          {/* Top Right Controls - Scrolable on mobile */}
+          <div className="w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+            <div className="flex items-center gap-2 min-w-max">
+              {isAdmin && !viewingAsUser && (
                 <NavButton
-                  onClick={() => setShowSettings(true)}
-                  icon={<Settings className="w-5 h-5 text-slate-400" />}
-                  label="Configuración"
+                  onClick={() => setShowAdminPanel(true)}
+                  icon={<Shield className="w-5 h-5 text-amber-500" />}
+                  label="Admin Panel"
+                  colorClass="bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20"
+                />
+              )}
+              {viewingAsUser && (
+                <button
+                  onClick={() => setViewingAsUser(null)}
+                  className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs md:text-sm font-bold shadow-md whitespace-nowrap"
+                >
+                  <LogOut className="w-4 h-4" /> Salir de {viewingAsUser.email}
+                </button>
+              )}
+
+              <NavButton
+                onClick={() => setShowNotifications(true)}
+                icon={<Bell className="w-5 h-5 text-white" />}
+                label="Notificaciones"
+                colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                badge={activeNotificationsCount}
+              />
+
+              <div className="w-px h-6 bg-slate-700 mx-1 hidden sm:block"></div>
+
+              {!viewingAsUser && (
+                <>
+                  <TextNavButton
+                    onClick={handleDownloadTemplate}
+                    icon={<FileDown className="w-4 h-4 text-emerald-400" />}
+                    label="Plantilla"
+                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
+                  />
+                  <TextNavButton
+                    onClick={triggerFileUpload}
+                    icon={
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                    }
+                    label="Importar"
+                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
+                  />
+                  <TextNavButton
+                    onClick={handleExportCSV}
+                    icon={<Download className="w-4 h-4 text-blue-400" />}
+                    label="Exportar"
+                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
+                  />
+                  <TextNavButton
+                    onClick={handleDeleteAll}
+                    icon={<Trash2 className="w-4 h-4 text-rose-400" />}
+                    label="Borrar"
+                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
+                  />
+                  <NavButton
+                    onClick={() => setShowSettings(true)}
+                    icon={<Settings className="w-5 h-5 text-slate-400" />}
+                    label="Configuración"
+                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                  />
+                </>
+              )}
+
+              <div className="hidden md:block">
+                <NavButton
+                  onClick={handleLogout}
+                  icon={<LogOut className="w-5 h-5 text-rose-400" />}
+                  label="Cerrar Sesión"
                   colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
                 />
-              </>
-            )}
-
-            <NavButton
-              onClick={handleLogout}
-              icon={<LogOut className="w-5 h-5 text-rose-400" />}
-              label="Cerrar Sesión"
-              colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-            />
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+      <div className="max-w-7xl mx-auto p-3 md:p-6 space-y-4 md:space-y-6">
+        {/* Stats Grid - Responsive Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
           <StatsCard
             title="Total Clientes"
             value={stats.total}
-            icon={<Users className="w-5 h-5 text-blue-400" />}
+            icon={<Users className="w-4 h-4 md:w-5 md:h-5 text-blue-400" />}
             color="border-blue-500"
             active={filterStatus === "all"}
             onClick={() => setFilterStatus("all")}
@@ -1157,7 +1295,9 @@ export default function App() {
           <StatsCard
             title="Activos"
             value={stats.active}
-            icon={<CheckCircle className="w-5 h-5 text-emerald-400" />}
+            icon={
+              <CheckCircle className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
+            }
             color="border-emerald-500"
             active={filterStatus === "active"}
             onClick={() => setFilterStatus("active")}
@@ -1165,7 +1305,9 @@ export default function App() {
           <StatsCard
             title="Por Vencer"
             value={stats.expiringSoon}
-            icon={<AlertCircle className="w-5 h-5 text-yellow-400" />}
+            icon={
+              <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-yellow-400" />
+            }
             color="border-yellow-500"
             active={filterStatus === "expiring"}
             onClick={() => setFilterStatus("expiring")}
@@ -1173,19 +1315,18 @@ export default function App() {
           <StatsCard
             title="Vencidos"
             value={stats.expired}
-            icon={<LogOut className="w-5 h-5 text-rose-400" />}
+            icon={<LogOut className="w-4 h-4 md:w-5 md:h-5 text-rose-400" />}
             color="border-rose-500"
             active={filterStatus === "expired"}
             onClick={() => setFilterStatus("expired")}
           />
         </div>
 
-        <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700/50 overflow-hidden">
-          {/* Header Tabla (Lower Bar) */}
-          <div className="p-4 border-b border-slate-700 bg-slate-800 flex flex-col lg:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-3 flex-1 w-full lg:w-auto">
-              {/* Search moved here */}
-              <div className="relative flex-1 max-w-md">
+        <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700/50 md:overflow-hidden">
+          {/* Controls Bar */}
+          <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 md:gap-4 sticky top-[73px] md:top-0 z-10 shadow-md md:shadow-none">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+              <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
@@ -1196,43 +1337,67 @@ export default function App() {
                 />
               </div>
 
-              {/* Add Button moved here */}
               {!viewingAsUser && (
                 <button
                   onClick={() => openModal()}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-blue-900/20 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
+                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-blue-900/20 transition-all active:scale-95 whitespace-nowrap"
                 >
-                  <Plus className="w-4 h-4" /> Agregar cliente
+                  <Plus className="w-4 h-4" />{" "}
+                  <span className="sm:hidden md:inline">Agregar</span>{" "}
+                  <span className="hidden sm:inline md:hidden">Agregar</span>{" "}
+                  <span className="hidden lg:inline">Cliente</span>
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-4 w-full lg:w-auto justify-between lg:justify-end">
-              <div className="flex items-center gap-2 text-slate-300 font-semibold text-sm">
+            <div className="flex items-center gap-2 md:gap-4 justify-between">
+              <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs md:text-sm">
                 <Filter className="w-4 h-4" />{" "}
                 <span className="hidden sm:inline">Ordenar:</span>
               </div>
-              <div className="relative">
+              <div className="relative flex-1 sm:flex-none">
                 <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                   <ArrowUpDown className="w-3 h-3" />
                 </div>
                 <select
                   value={sortOption}
                   onChange={(e) => setSortOption(e.target.value)}
-                  className="pl-8 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-600 text-slate-200 text-xs font-medium focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-700 transition-colors"
+                  className="w-full sm:w-auto pl-8 pr-4 py-1.5 rounded-lg bg-slate-900 border border-slate-600 text-slate-200 text-xs font-medium focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-700 transition-colors"
                 >
                   <option value="expiryDate">Expiración</option>
                   <option value="name">Nombre</option>
                   <option value="platform">Plataforma</option>
                 </select>
               </div>
-              <span className="text-xs font-medium text-slate-400 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700">
+              <span className="text-xs font-medium text-slate-400 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 whitespace-nowrap">
                 {loading ? "..." : `${filteredClients.length} regs`}
               </span>
             </div>
           </div>
 
-          <div className="overflow-x-auto scrollbar-hide">
+          {/* VISTA MÓVIL: Lista de Tarjetas (Visible solo en móvil) */}
+          <div className="block md:hidden p-3 space-y-3">
+            {filteredClients.length === 0 && !loading && (
+              <div className="text-center py-8 text-slate-500">
+                No se encontraron clientes.
+              </div>
+            )}
+            {filteredClients.map((client) => (
+              <MobileClientCard
+                key={client.id}
+                client={client}
+                platforms={userPlatforms}
+                onWhatsApp={openWhatsApp}
+                onDetails={openDetailsModal}
+                onRenew={handleOpenRenewalModal}
+                onDelete={handleDelete}
+                isViewOnly={!!viewingAsUser}
+              />
+            ))}
+          </div>
+
+          {/* VISTA ESCRITORIO: Tabla (Oculta en móvil) */}
+          <div className="hidden md:block overflow-x-auto scrollbar-hide">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-900/50 text-slate-400 font-medium uppercase text-xs tracking-wider">
                 <tr>
@@ -1313,7 +1478,6 @@ export default function App() {
                       </td>
                       <td className="px-4 py-3 align-middle text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {/* Botón WhatsApp DIRECTO */}
                           <NavButton
                             onClick={() => openWhatsApp(client)}
                             icon={<MessageCircle className="w-4 h-4" />}
@@ -1321,14 +1485,12 @@ export default function App() {
                             colorClass="text-emerald-400 bg-emerald-900/20 hover:bg-emerald-900/40 border-emerald-900/30"
                           />
                           <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                          {/* Botón Detalles (NUEVO: Usando NavButton para tooltip) */}
                           <NavButton
                             onClick={() => openDetailsModal(client)}
                             icon={<Eye className="w-4 h-4" />}
                             label="Ver Detalles"
                             colorClass="text-blue-400 bg-blue-900/20 hover:bg-blue-900/40 border-blue-900/30"
                           />
-                          {/* Botón Renovar (NUEVO: Usando NavButton para tooltip) */}
                           <NavButton
                             onClick={() => handleOpenRenewalModal(client)}
                             icon={<RefreshCw className="w-4 h-4" />}
@@ -1403,8 +1565,8 @@ export default function App() {
       {/* Settings */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200 h-[85vh] flex flex-col">
-            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200 h-[85vh] md:h-[85vh] flex flex-col">
+            <div className="p-4 md:p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
               <div className="flex items-center gap-3">
                 <div className="bg-slate-700 p-2 rounded-lg text-slate-300">
                   <Settings className="w-5 h-5" />
@@ -1426,73 +1588,78 @@ export default function App() {
             <div className="flex border-b border-slate-800">
               <button
                 onClick={() => setSettingsTab("platforms")}
-                className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
+                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${
                   settingsTab === "platforms"
                     ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 <div className="flex items-center justify-center gap-2">
-                  <Tv className="w-4 h-4" /> Plataformas
+                  <Tv className="w-4 h-4" />{" "}
+                  <span className="hidden sm:inline">Plataformas</span>
                 </div>
               </button>
               <button
                 onClick={() => setSettingsTab("messages")}
-                className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
+                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${
                   settingsTab === "messages"
                     ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 <div className="flex items-center justify-center gap-2">
-                  <MessageSquare className="w-4 h-4" /> Mensajes
+                  <MessageSquare className="w-4 h-4" />{" "}
+                  <span className="hidden sm:inline">Mensajes</span>
                 </div>
               </button>
               <button
                 onClick={() => setSettingsTab("notifications")}
-                className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
+                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${
                   settingsTab === "notifications"
                     ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 <div className="flex items-center justify-center gap-2">
-                  <Bell className="w-4 h-4" /> Notificaciones
+                  <Bell className="w-4 h-4" />{" "}
+                  <span className="hidden sm:inline">Notificaciones</span>
                 </div>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
               {settingsTab === "platforms" ? (
                 <div className="space-y-6">
                   <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
                     <label className="block text-xs font-bold text-slate-400 mb-3 uppercase">
                       Agregar Nueva
                     </label>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-col sm:flex-row">
                       <input
                         type="text"
                         placeholder="Nombre"
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 text-white text-sm focus:border-blue-500 outline-none uppercase"
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-blue-500 outline-none uppercase"
                         value={newPlatformName}
                         onChange={(e) => setNewPlatformName(e.target.value)}
                       />
-                      <select
-                        className="bg-slate-950 border border-slate-700 rounded-lg px-3 text-white text-sm outline-none"
-                        value={newPlatformColor}
-                        onChange={(e) => setNewPlatformColor(e.target.value)}
-                      >
-                        {AVAILABLE_COLORS.map((c) => (
-                          <option key={c.class} value={c.class}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={handleAddPlatform}
-                        className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg"
-                      >
-                        <Plus className="w-5 h-5" />
-                      </button>
+                      <div className="flex gap-2">
+                        <select
+                          className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 text-white text-sm outline-none"
+                          value={newPlatformColor}
+                          onChange={(e) => setNewPlatformColor(e.target.value)}
+                        >
+                          {AVAILABLE_COLORS.map((c) => (
+                            <option key={c.class} value={c.class}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={handleAddPlatform}
+                          className="bg-blue-600 hover:bg-blue-500 text-white p-2.5 rounded-lg"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -1553,7 +1720,7 @@ export default function App() {
                                 {plat.name}
                               </span>
                             </div>
-                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={() => startEditingPlatform(plat)}
                                 className="text-slate-500 hover:text-blue-400 p-1"
@@ -1575,6 +1742,7 @@ export default function App() {
                 </div>
               ) : settingsTab === "messages" ? (
                 <div className="space-y-5">
+                  {/* Messages settings content remains same */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
                       <label className="text-sm font-bold text-yellow-400">
@@ -1594,7 +1762,7 @@ export default function App() {
                       }
                     />
                   </div>
-
+                  {/* ... other message blocks ... */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
                     <div className="mb-2">
                       <label className="text-sm font-bold text-blue-400 flex gap-2">
@@ -1654,6 +1822,7 @@ export default function App() {
               ) : (
                 <div className="space-y-5">
                   {/* TAB NOTIFICACIONES */}
+                  {/* ... same notification content ... */}
                   <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
                     <div>
                       <h4 className="text-white font-bold text-sm flex items-center gap-2">
@@ -1661,8 +1830,7 @@ export default function App() {
                         Seguimiento Preventivo
                       </h4>
                       <p className="text-slate-400 text-xs mt-1">
-                        Avisar 15 días antes del vencimiento para chequear
-                        calidad.
+                        Avisar 15 días antes del vencimiento.
                       </p>
                     </div>
                     <button
@@ -1692,7 +1860,7 @@ export default function App() {
                         Alerta de Urgencia
                       </h4>
                       <p className="text-slate-400 text-xs mt-1">
-                        Avisar 1 día antes del vencimiento (Mañana).
+                        Avisar 1 día antes del vencimiento.
                       </p>
                     </div>
                     <button
@@ -1719,10 +1887,10 @@ export default function App() {
                     <div>
                       <h4 className="text-white font-bold text-sm flex items-center gap-2">
                         <HeartHandshake className="w-4 h-4 text-purple-400" />{" "}
-                        Recuperación de Clientes
+                        Recuperación
                       </h4>
                       <p className="text-slate-400 text-xs mt-1">
-                        Intentar recuperar al cliente 15 días después de vencer.
+                        Intentar recuperar al cliente 15 días después.
                       </p>
                     </div>
                     <button
@@ -1772,19 +1940,19 @@ export default function App() {
             <div className="grid grid-cols-3 gap-2 mb-4">
               <button
                 onClick={() => applyRenewalPreset(1)}
-                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700"
+                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700 text-sm"
               >
                 +1 Mes
               </button>
               <button
                 onClick={() => applyRenewalPreset(3)}
-                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700"
+                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700 text-sm"
               >
                 +3 Meses
               </button>
               <button
                 onClick={() => applyRenewalPreset(6)}
-                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700"
+                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700 text-sm"
               >
                 +6 Meses
               </button>
@@ -1809,25 +1977,25 @@ export default function App() {
 
       {/* Detalles */}
       {viewDetailsClient && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-700 overflow-hidden animate-in slide-in-from-bottom duration-200 h-[90vh] sm:h-auto sm:max-h-[90vh] flex flex-col">
             {/* Header */}
-            <div className="p-6 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
-              <div className="flex items-center gap-4">
+            <div className="p-4 md:p-6 border-b border-slate-800 bg-slate-900 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3 md:gap-4">
                 <div
-                  className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${
+                  className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg ${
                     userPlatforms.find(
                       (p) => p.id === viewDetailsClient.platform
                     )?.color || "bg-slate-700"
                   }`}
                 >
-                  <Monitor className="w-8 h-8 text-white" />
+                  <Monitor className="w-6 h-6 md:w-8 md:h-8 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-white tracking-tight">
+                  <h2 className="text-lg md:text-2xl font-bold text-white tracking-tight">
                     {viewDetailsClient.name}
                   </h2>
-                  <div className="flex items-center gap-2 text-slate-400 text-sm">
+                  <div className="flex items-center gap-2 text-slate-400 text-xs md:text-sm">
                     <span className="uppercase font-bold tracking-wider">
                       {viewDetailsClient.platform}
                     </span>
@@ -1842,15 +2010,15 @@ export default function App() {
                 onClick={closeDetailsModal}
                 className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white p-2 rounded-xl transition-colors"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5 md:w-6 md:h-6" />
               </button>
             </div>
 
-            {/* Body Grid */}
-            <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Body Grid - Scrollable */}
+            <div className="p-4 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 overflow-y-auto">
               {/* Columna 1: Accesos */}
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <div className="space-y-3 md:space-y-4">
+                <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                   <Lock className="w-4 h-4" /> Credenciales
                 </h3>
                 <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
@@ -1858,7 +2026,7 @@ export default function App() {
                     <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
                       Usuario
                     </label>
-                    <div className="flex items-center gap-2 text-white font-mono text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                    <div className="flex items-center gap-2 text-white font-mono text-base md:text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50">
                       <User className="w-4 h-4 text-slate-500" />
                       <span className="truncate">
                         {viewDetailsClient.username}
@@ -1869,7 +2037,7 @@ export default function App() {
                     <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
                       Contraseña
                     </label>
-                    <div className="flex items-center gap-2 text-white font-mono text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50 justify-between">
+                    <div className="flex items-center gap-2 text-white font-mono text-base md:text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50 justify-between">
                       <div className="flex items-center gap-2 overflow-hidden">
                         <Lock className="w-4 h-4 text-slate-500" />
                         <span className="truncate">
@@ -1896,8 +2064,8 @@ export default function App() {
               </div>
 
               {/* Columna 2: Fechas y Estado */}
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <div className="space-y-3 md:space-y-4">
+                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                   <Activity className="w-4 h-4" /> Estado del Servicio
                 </h3>
                 <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
@@ -1925,7 +2093,7 @@ export default function App() {
                       Expiración
                     </label>
                     <p
-                      className={`text-2xl font-bold ${
+                      className={`text-xl md:text-2xl font-bold ${
                         getDaysRemaining(viewDetailsClient.expiryDate) < 0
                           ? "text-rose-500"
                           : "text-emerald-400"
@@ -1945,8 +2113,8 @@ export default function App() {
               </div>
 
               {/* Columna 3: Contacto y Conexión */}
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <div className="space-y-3 md:space-y-4">
+                <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                   <Phone className="w-4 h-4" /> Contacto y Uso
                 </h3>
                 <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
@@ -1957,7 +2125,7 @@ export default function App() {
                     <label className="text-slate-500 text-xs font-bold uppercase block mb-1 group-hover:text-emerald-400 transition-colors">
                       WhatsApp
                     </label>
-                    <div className="flex items-center gap-2 text-white text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50 group-hover:border-emerald-500/50 transition-colors">
+                    <div className="flex items-center gap-2 text-white text-base md:text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50 group-hover:border-emerald-500/50 transition-colors">
                       <MessageCircle className="w-5 h-5 text-emerald-500" />
                       <span>{viewDetailsClient.contact || "Sin número"}</span>
                     </div>
@@ -1966,7 +2134,7 @@ export default function App() {
                     <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
                       Dispositivos
                     </label>
-                    <div className="flex items-center gap-2 text-white text-lg">
+                    <div className="flex items-center gap-2 text-white text-base md:text-lg">
                       <Wifi className="w-5 h-5 text-blue-500" />
                       <span>
                         {viewDetailsClient.connections} Pantalla
@@ -1978,25 +2146,25 @@ export default function App() {
               </div>
             </div>
 
-            {/* Footer Actions */}
-            <div className="p-6 bg-slate-900 border-t border-slate-800 flex gap-4">
+            {/* Footer Actions - Sticky Bottom */}
+            <div className="p-4 md:p-6 bg-slate-900 border-t border-slate-800 flex gap-4 shrink-0">
               <button
                 onClick={() => {
                   closeDetailsModal();
                   handleOpenRenewalModal(viewDetailsClient);
                 }}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm md:text-base"
               >
-                <RefreshCw className="w-5 h-5" /> Renovar Suscripción
+                <RefreshCw className="w-5 h-5" /> Renovar
               </button>
               <button
                 onClick={() => {
                   closeDetailsModal();
                   openModal(viewDetailsClient);
                 }}
-                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold border border-slate-700 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold border border-slate-700 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm md:text-base"
               >
-                <Edit2 className="w-5 h-5" /> Editar Datos
+                <Edit2 className="w-5 h-5" /> Editar
               </button>
             </div>
           </div>
@@ -2006,8 +2174,8 @@ export default function App() {
       {/* Notificaciones */}
       {showNotifications && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden">
-            <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden h-[80vh] flex flex-col">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900 shrink-0">
               <h3 className="text-white font-bold flex items-center gap-2">
                 <Bell className="w-5 h-5" /> Notificaciones
               </h3>
@@ -2015,7 +2183,7 @@ export default function App() {
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
-            <div className="p-4 max-h-[60vh] overflow-y-auto space-y-2">
+            <div className="p-4 overflow-y-auto space-y-2 flex-1">
               {pendingNotifications.length === 0 && (
                 <p className="text-center text-slate-500 py-4">
                   Sin notificaciones pendientes.
@@ -2123,7 +2291,7 @@ export default function App() {
       {/* Nuevo/Editar Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 p-6">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 p-6 overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold text-white">
                 {editingClient ? "Editar Cliente" : "Nuevo Cliente"}
@@ -2168,7 +2336,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* NUEVO CAMPO CONTRASEÑA EN FORMULARIO (Opcional pero oculto en la tabla principal) */}
               <div>
                 <label className="block text-xs text-slate-400 mb-1">
                   CONTRASEÑA DE SERVICIO (Opcional)
@@ -2273,17 +2440,6 @@ export default function App() {
   );
 }
 
-function DetailItem({ icon, label, value, valueColor = "text-white" }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5 text-slate-500 text-xs font-semibold uppercase">
-        {icon} <span>{label}</span>
-      </div>
-      <div className={`text-sm font-medium ${valueColor}`}>{value}</div>
-    </div>
-  );
-}
-
 function StatsCard({ title, value, icon, color, active, onClick }) {
   const activeClass = active
     ? "bg-slate-800 ring-1"
@@ -2294,7 +2450,7 @@ function StatsCard({ title, value, icon, color, active, onClick }) {
     <div
       onClick={onClick}
       className={`
-        cursor-pointer p-4 rounded-xl shadow-lg 
+        cursor-pointer p-3 md:p-4 rounded-xl shadow-lg 
         border-b-4 transition-all duration-200
         ${color} 
         ${activeClass} 
@@ -2303,12 +2459,14 @@ function StatsCard({ title, value, icon, color, active, onClick }) {
     >
       <div className="flex justify-between items-start">
         <div>
-          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+          <p className="text-slate-400 text-[9px] md:text-[10px] font-bold uppercase tracking-wider truncate">
             {title}
           </p>
-          <h3 className="text-2xl font-bold text-white mt-1">{value}</h3>
+          <h3 className="text-xl md:text-2xl font-bold text-white mt-1">
+            {value}
+          </h3>
         </div>
-        <div className="opacity-90 p-2 bg-slate-900/40 rounded-lg backdrop-blur-sm">
+        <div className="opacity-90 p-1.5 md:p-2 bg-slate-900/40 rounded-lg backdrop-blur-sm">
           {icon}
         </div>
       </div>
