@@ -104,14 +104,14 @@ const appId = typeof __app_id !== "undefined" ? __app_id : APP_ID_NEGOCIO;
 // --- Constantes y Defaults ---
 
 const DEFAULT_PLATFORMS = [
-  { id: "LOTV", name: "LOTV", color: "bg-blue-600" },
-  { id: "KAELUS", name: "KAELUS", color: "bg-rose-600" },
-  { id: "DIGITAL", name: "DIGITAL", color: "bg-cyan-600" },
-  { id: "MAGIS", name: "MAGIS", color: "bg-violet-600" },
-  { id: "NANO", name: "NANO", color: "bg-orange-500" },
-  { id: "ICOMPLAY", name: "ICOMPLAY", color: "bg-indigo-500" },
-  { id: "LATAMPLUS", name: "LATAMPLUS", color: "bg-pink-600" },
-  { id: "OTRO", name: "OTRO", color: "bg-emerald-600" },
+  { id: "LOTV", name: "LOTV", color: "bg-blue-600", url: "" },
+  { id: "KAELUS", name: "KAELUS", color: "bg-rose-600", url: "" },
+  { id: "DIGITAL", name: "DIGITAL", color: "bg-cyan-600", url: "" },
+  { id: "MAGIS", name: "MAGIS", color: "bg-violet-600", url: "" },
+  { id: "NANO", name: "NANO", color: "bg-orange-500", url: "" },
+  { id: "ICOMPLAY", name: "ICOMPLAY", color: "bg-indigo-500", url: "" },
+  { id: "LATAMPLUS", name: "LATAMPLUS", color: "bg-pink-600", url: "" },
+  { id: "OTRO", name: "OTRO", color: "bg-emerald-600", url: "" },
 ];
 
 const DEFAULT_TEMPLATES = {
@@ -247,6 +247,7 @@ const MobileClientCard = ({
   const isExpiringSoon = days >= 0 && days <= 5;
   const platformObj = platforms.find((p) => p.id === client.platform);
   const platformColor = platformObj?.color || "bg-slate-600";
+  const platformUrl = platformObj?.url;
 
   return (
     <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-sm relative overflow-hidden">
@@ -264,11 +265,22 @@ const MobileClientCard = ({
       <div className="pl-3">
         <div className="flex justify-between items-start mb-2">
           <div>
-            <span
-              className={`${platformColor} text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide`}
-            >
-              {client.platform}
-            </span>
+            {platformUrl ? (
+              <a
+                href={platformUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${platformColor} text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide hover:opacity-80 transition-opacity flex items-center gap-1 w-fit`}
+              >
+                {client.platform} <Tv className="w-3 h-3" />
+              </a>
+            ) : (
+              <span
+                className={`${platformColor} text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide`}
+              >
+                {client.platform}
+              </span>
+            )}
             <h3 className="text-white font-bold text-lg mt-1">{client.name}</h3>
           </div>
           <div className="text-right">
@@ -544,6 +556,7 @@ export default function App() {
   const [newPlatformColor, setNewPlatformColor] = useState(
     AVAILABLE_COLORS[0].class
   );
+  const [newPlatformUrl, setNewPlatformUrl] = useState("");
   const [editingPlatform, setEditingPlatform] = useState(null);
 
   // UI States
@@ -632,6 +645,7 @@ export default function App() {
           if (data.templates) setUserTemplates(data.templates);
           if (data.notificationPrefs)
             setUserNotificationPrefs(data.notificationPrefs);
+          if (data.dismissedIds) setDismissedIds(data.dismissedIds);
         } else {
           setUserPlatforms(DEFAULT_PLATFORMS);
           setUserTemplates(DEFAULT_TEMPLATES);
@@ -695,7 +709,12 @@ export default function App() {
     await signOut(auth);
   };
 
-  const saveSettingsToDB = async (newPlatforms, newTemplates, newPrefs) => {
+  const saveSettingsToDB = async (
+    newPlatforms,
+    newTemplates,
+    newPrefs,
+    newDismissedIds
+  ) => {
     if (!user) return;
     try {
       await setDoc(
@@ -704,6 +723,7 @@ export default function App() {
           platforms: newPlatforms || userPlatforms,
           templates: newTemplates || userTemplates,
           notificationPrefs: newPrefs || userNotificationPrefs,
+          dismissedIds: newDismissedIds || dismissedIds,
         },
         { merge: true }
       );
@@ -718,6 +738,7 @@ export default function App() {
       id: newPlatformName.toUpperCase().replace(/\s/g, ""),
       name: newPlatformName.toUpperCase(),
       color: newPlatformColor,
+      url: newPlatformUrl.trim(),
     };
     if (userPlatforms.some((p) => p.name === newPlat.name)) {
       alert("Ya existe.");
@@ -725,8 +746,9 @@ export default function App() {
     }
     const updated = [...userPlatforms, newPlat];
     setUserPlatforms(updated);
-    saveSettingsToDB(updated, null, null);
+    saveSettingsToDB(updated, null, null, null);
     setNewPlatformName("");
+    setNewPlatformUrl("");
   };
 
   const handleDeletePlatform = (id) => {
@@ -747,11 +769,12 @@ export default function App() {
             ...p,
             name: editingPlatform.name.toUpperCase(),
             color: editingPlatform.color,
+            url: editingPlatform.url,
           }
         : p
     );
     setUserPlatforms(updatedPlatforms);
-    saveSettingsToDB(updatedPlatforms, null, null);
+    saveSettingsToDB(updatedPlatforms, null, null, null);
     setEditingPlatform(null);
   };
 
@@ -910,10 +933,21 @@ export default function App() {
         ),
         updates
       );
+
+      // Si el cliente estaba en la lista de ignorados, lo sacamos porque se renovó
+      if (dismissedIds.includes(renewingClient.id)) {
+        const updatedDismissed = dismissedIds.filter(
+          (id) => id !== renewingClient.id
+        );
+        setDismissedIds(updatedDismissed);
+        saveSettingsToDB(null, null, null, updatedDismissed);
+      }
+
       setRenewingClient(null);
       if (viewDetailsClient && viewDetailsClient.id === renewingClient.id)
         closeDetailsModal();
     } catch (error) {
+      console.error(error);
       alert("Error al renovar.");
     }
   };
@@ -1093,8 +1127,10 @@ export default function App() {
   const handleClearCompleted = () => {
     if (completedTasks.length === 0) return;
     if (confirm("¿Borrar las notificaciones marcadas como completadas?")) {
-      setDismissedIds((prev) => [...prev, ...completedTasks]);
+      const updatedDismissed = [...dismissedIds, ...completedTasks];
+      setDismissedIds(updatedDismissed);
       setCompletedTasks([]);
+      saveSettingsToDB(null, null, null, updatedDismissed);
     }
   };
 
@@ -1452,6 +1488,7 @@ export default function App() {
                   );
                   const platformColor = platformObj?.color || "bg-slate-600";
                   const platformName = platformObj?.name || client.platform;
+                  const platformUrl = platformObj?.url;
 
                   return (
                     <tr
@@ -1473,11 +1510,22 @@ export default function App() {
                         </div>
                       </td>
                       <td className="px-4 py-3 align-middle">
-                        <span
-                          className={`${platformColor} text-white px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase shadow-sm`}
-                        >
-                          {platformName}
-                        </span>
+                        {platformUrl ? (
+                          <a
+                            href={platformUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`${platformColor} text-white px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase shadow-sm hover:opacity-80 transition-opacity flex items-center gap-1 w-fit`}
+                          >
+                            {platformName} <Tv className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span
+                            className={`${platformColor} text-white px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase shadow-sm`}
+                          >
+                            {platformName}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 align-middle">
                         <span className="font-mono text-slate-300 text-xs">
@@ -1672,6 +1720,13 @@ export default function App() {
                         value={newPlatformName}
                         onChange={(e) => setNewPlatformName(e.target.value)}
                       />
+                      <input
+                        type="text"
+                        placeholder="URL (http...)"
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-blue-500 outline-none"
+                        value={newPlatformUrl}
+                        onChange={(e) => setNewPlatformUrl(e.target.value)}
+                      />
                       <div className="flex gap-2">
                         <select
                           className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 text-white text-sm outline-none"
@@ -1709,6 +1764,18 @@ export default function App() {
                                 setEditingPlatform({
                                   ...editingPlatform,
                                   name: e.target.value,
+                                })
+                              }
+                            />
+                            <input
+                              type="text"
+                              placeholder="URL"
+                              className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs"
+                              value={editingPlatform.url || ""}
+                              onChange={(e) =>
+                                setEditingPlatform({
+                                  ...editingPlatform,
+                                  url: e.target.value,
                                 })
                               }
                             />
@@ -2407,6 +2474,20 @@ export default function App() {
                     }
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  ID (Opcional)
+                </label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                  value={formData.customId || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, customId: e.target.value })
+                  }
+                />
               </div>
 
               <div>
