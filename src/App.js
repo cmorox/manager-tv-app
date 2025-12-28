@@ -46,7 +46,21 @@ import {
   MoreVertical,
   Trash, // Nuevo icono para borrar completados
   AlertTriangle, // Nuevo icono para alarma de vencidos
+  DollarSign,
 } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
@@ -187,7 +201,7 @@ const parseCSVDate = (dateStr) => {
     }
     const d = new Date(cleanDateStr);
     if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
-  } catch (e) {}image.png
+  } catch (e) { } image.png
   return new Date().toISOString().split("T")[0];
 };
 
@@ -253,13 +267,12 @@ const MobileClientCard = ({
     <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-sm relative overflow-hidden">
       {/* Indicador de estado lateral */}
       <div
-        className={`absolute left-0 top-0 bottom-0 w-1 ${
-          isExpired
-            ? "bg-rose-500"
-            : isExpiringSoon
+        className={`absolute left-0 top-0 bottom-0 w-1 ${isExpired
+          ? "bg-rose-500"
+          : isExpiringSoon
             ? "bg-yellow-400"
             : "bg-emerald-500"
-        }`}
+          }`}
       ></div>
 
       <div className="pl-3">
@@ -285,13 +298,12 @@ const MobileClientCard = ({
           </div>
           <div className="text-right">
             <p
-              className={`font-bold text-sm ${
-                isExpired
-                  ? "text-rose-400"
-                  : isExpiringSoon
+              className={`font-bold text-sm ${isExpired
+                ? "text-rose-400"
+                : isExpiringSoon
                   ? "text-yellow-400"
                   : "text-emerald-400"
-              }`}
+                }`}
             >
               {formatDate(client.expiryDate)}
             </p>
@@ -315,13 +327,22 @@ const MobileClientCard = ({
               Días
             </p>
             <p
-              className={`text-xs font-bold ${
-                days < 0 ? "text-rose-400" : "text-slate-300"
-              }`}
+              className={`text-xs font-bold ${days < 0 ? "text-rose-400" : "text-slate-300"
+                }`}
             >
               {days < 0 ? "VENCIDO" : `${days} días`}
             </p>
           </div>
+          {client.lastPaymentAmount > 0 && (
+            <div className="bg-slate-900/50 p-2 rounded border border-slate-700/50 col-span-2 flex justify-between items-center">
+              <p className="text-[10px] text-slate-500 uppercase font-bold">
+                Último Pago
+              </p>
+              <p className="text-emerald-400 font-bold text-xs">
+                ${client.lastPaymentAmount}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Botones de acción grandes para dedo */}
@@ -392,6 +413,220 @@ const VariableToolbar = ({ onInsert }) => (
     </button>
   </div>
 );
+
+// --- COMPONENTE ANALYTICS DASHBOARD ---
+const AnalyticsDashboard = ({ clients }) => {
+  const data = useMemo(() => {
+    const platformCounts = {};
+    clients.forEach((c) => {
+      const p = c.platform || "OTRO";
+      platformCounts[p] = (platformCounts[p] || 0) + 1;
+    });
+    return Object.keys(platformCounts).map((key) => ({
+      name: key,
+      value: platformCounts[key],
+    }));
+  }, [clients]);
+
+  const totalRevenue = useMemo(() => {
+    return clients.reduce((acc, curr) => acc + (curr.totalRevenue || 0), 0);
+  }, [clients]);
+
+  const estimatedRevenue = useMemo(() => {
+    return clients
+      .filter((c) => getDaysRemaining(c.expiryDate) >= 0)
+      .reduce((acc, curr) => acc + (curr.lastPaymentAmount || 0), 0);
+  }, [clients]);
+
+  const upcoming = useMemo(() => {
+    return clients
+      .filter((c) => {
+        const d = getDaysRemaining(c.expiryDate);
+        return d >= 0 && d <= 3;
+      })
+      .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate))
+      .slice(0, 5);
+  }, [clients]);
+
+  const platformRevenue = useMemo(() => {
+    const revenue = {};
+    clients.forEach((c) => {
+      // Consideramos solo clientes activos para el desglose mensual
+      if (getDaysRemaining(c.expiryDate) >= 0) {
+        const p = c.platform || "OTRO";
+        revenue[p] = (revenue[p] || 0) + (c.lastPaymentAmount || 0);
+      }
+    });
+    return Object.keys(revenue)
+      .map((key) => ({
+        name: key,
+        value: revenue[key],
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+  }, [clients]);
+
+  const CHART_COLORS = [
+    "#3b82f6", // blue
+    "#ef4444", // red
+    "#10b981", // emerald
+    "#f59e0b", // amber
+    "#8b5cf6", // violet
+    "#ec4899", // pink
+    "#06b6d4", // cyan
+    "#f97316", // orange
+  ];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-4 md:mb-6">
+      {/* Col 1: Finanzas (Mensual + Gráfica) */}
+      <div className="bg-[#111827] p-4 md:p-5 rounded-xl md:rounded-2xl border border-gray-800 shadow-xl flex flex-col relative overflow-hidden group min-h-[160px]">
+        <div className="absolute top-0 right-0 w-24 md:w-32 h-24 md:h-32 bg-emerald-500/5 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-emerald-500/10"></div>
+
+        <div className="relative z-10 flex flex-col h-full">
+          <div className="flex items-center gap-2 md:gap-3 mb-4">
+            <div className="p-2 bg-emerald-500/10 rounded-lg md:rounded-xl text-emerald-400 border border-emerald-500/20">
+              <DollarSign className="w-4 h-4 md:w-5 md:h-5" />
+            </div>
+            <div>
+              <h3 className="text-gray-400 text-[10px] md:text-xs font-bold uppercase tracking-wider">
+                Ingreso Mensual
+              </h3>
+              <p className="text-2xl md:text-3xl font-bold text-white tracking-tight">
+                ${estimatedRevenue.toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-[120px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={platformRevenue} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <XAxis type="number" hide />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  width={60}
+                  tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 'bold' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                  contentStyle={{
+                    backgroundColor: "#1f2937",
+                    borderColor: "#374151",
+                    color: "#f3f4f6",
+                    borderRadius: "0.5rem",
+                    fontSize: "12px",
+                  }}
+                  itemStyle={{ color: "#10b981" }}
+                  formatter={(value) => [`$${value}`, 'Ingresos']}
+                />
+                <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={12} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Col 2: Atención Requerida */}
+      <div className="bg-[#111827] p-4 md:p-5 rounded-xl md:rounded-2xl border border-gray-800 shadow-xl flex flex-col relative overflow-hidden min-h-[160px]">
+        <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
+          <div className="p-2 bg-amber-500/10 rounded-lg md:rounded-xl text-amber-400 border border-amber-500/20">
+            <AlertTriangle className="w-4 h-4 md:w-5 md:h-5" />
+          </div>
+          <h3 className="text-gray-400 text-[10px] md:text-xs font-bold uppercase tracking-wider">
+            Atención
+          </h3>
+          <span className="ml-auto bg-amber-500/10 text-amber-400 text-[9px] md:text-[10px] font-bold px-1.5 md:px-2 py-0.5 rounded-full border border-amber-500/20">
+            {upcoming.length}
+          </span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 -mr-1 max-h-[150px] md:max-h-none">
+          {upcoming.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-600 space-y-2 py-4">
+              <CheckCircle className="w-6 h-6 md:w-8 md:h-8 opacity-50" />
+              <p className="text-[10px] md:text-xs font-medium">Todo en orden</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {upcoming.map((client) => {
+                const days = getDaysRemaining(client.expiryDate);
+                return (
+                  <div key={client.id} className="flex items-center justify-between p-2 md:p-2.5 rounded-lg md:rounded-xl bg-gray-900/50 border border-gray-800 hover:border-gray-700 transition-colors group">
+                    <div className="min-w-0">
+                      <p className="text-xs md:text-sm font-bold text-gray-200 truncate group-hover:text-white transition-colors">
+                        {client.name}
+                      </p>
+                      <p className="text-[9px] md:text-[10px] text-gray-500 uppercase font-bold truncate">
+                        {client.platform}
+                      </p>
+                    </div>
+                    <div className={`text-right px-1.5 md:px-2 py-0.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-xs font-bold border ${days <= 1
+                      ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                      : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>
+                      {days === 0 ? 'HOY' : `${days}d`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Col 3: Distribución (Pie Chart) */}
+      <div className="bg-[#111827] p-4 md:p-5 rounded-xl md:rounded-2xl border border-gray-800 shadow-xl flex flex-col items-center justify-center relative md:col-span-2 lg:col-span-1 min-h-[160px]">
+        <h3 className="absolute top-4 left-4 md:top-5 md:left-5 text-gray-400 text-[10px] md:text-xs font-bold uppercase tracking-wider">
+          Plataformas
+        </h3>
+        <div className="w-full h-[140px] md:h-[160px] mt-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={45}
+                outerRadius={65}
+                paddingAngle={4}
+                dataKey="value"
+                stroke="none"
+              >
+                {data.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={CHART_COLORS[index % CHART_COLORS.length]}
+                  />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#1f2937",
+                  borderColor: "#374151",
+                  color: "#f3f4f6",
+                  borderRadius: "0.5rem",
+                  fontSize: "12px",
+                  boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
+                }}
+                itemStyle={{ color: "#f3f4f6" }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        {/* Centro del Pie Chart */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none mt-4">
+          <div className="text-center">
+            <span className="text-xl md:text-2xl font-bold text-white">{clients.length}</span>
+            <p className="text-[8px] md:text-[9px] text-gray-500 uppercase font-bold">Total</p>
+          </div>
+        </div>
+      </div>
+    </div >
+  );
+};
 
 // --- COMPONENTE LOGIN ---
 function LoginScreen() {
@@ -507,8 +742,8 @@ function LoginScreen() {
             {loading
               ? "Procesando..."
               : isRegistering
-              ? "Registrarse"
-              : "Iniciar Sesión"}
+                ? "Registrarse"
+                : "Iniciar Sesión"}
           </button>
         </form>
 
@@ -570,6 +805,7 @@ export default function App() {
     newExpiryDate: "",
     baseDateUsed: null,
     isReactivation: false,
+    paymentAmount: 0,
   });
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -591,6 +827,7 @@ export default function App() {
     startDate: new Date().toISOString().split("T")[0],
     expiryDate: new Date().toISOString().split("T")[0],
     renewals: 1,
+    paymentAmount: 0,
   });
 
   // Auth Listener
@@ -664,13 +901,13 @@ export default function App() {
   // Función para cargar datos de prueba automáticamente
   const loadSampleData = useCallback(async () => {
     if (!user || viewingAsUser || sampleDataLoadedRef.current) return;
-    
+
     try {
       const response = await fetch("/datos_prueba.csv");
       const csvText = await response.text();
       const lines = csvText.split("\n");
       const newClients = [];
-      
+
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].trim().split(",");
         if (cols.length >= 8 && cols[0]?.trim()) {
@@ -689,7 +926,7 @@ export default function App() {
           });
         }
       }
-      
+
       if (newClients.length > 0) {
         const batch = writeBatch(db);
         const targetUid = user.uid;
@@ -726,7 +963,7 @@ export default function App() {
         }));
         setClients(clientsData);
         setLoading(false);
-        
+
         // Cargar datos de prueba automáticamente si el usuario no tiene clientes
         // y no se está viendo como otro usuario
         if (
@@ -824,11 +1061,11 @@ export default function App() {
     const updatedPlatforms = userPlatforms.map((p) =>
       p.id === editingPlatform.id
         ? {
-            ...p,
-            name: editingPlatform.name.toUpperCase(),
-            color: editingPlatform.color,
-            url: editingPlatform.url,
-          }
+          ...p,
+          name: editingPlatform.name.toUpperCase(),
+          color: editingPlatform.color,
+          url: editingPlatform.url,
+        }
         : p
     );
     setUserPlatforms(updatedPlatforms);
@@ -891,11 +1128,24 @@ export default function App() {
     if (!user) return;
     try {
       const collectionRef = getTargetCollection();
+      const payment = parseFloat(formData.paymentAmount) || 0;
+
       if (editingClient) {
-        await updateDoc(doc(collectionRef, editingClient.id), formData);
+        const newTotal = (editingClient.totalRevenue || 0) + payment;
+        const updates = {
+          ...formData,
+          totalRevenue: newTotal,
+        };
+        if (payment > 0) updates.lastPaymentAmount = payment;
+        // Remove paymentAmount from updates to avoid saving it as a persistent field if not needed, 
+        // but keeping it is harmless. We'll keep it simple.
+
+        await updateDoc(doc(collectionRef, editingClient.id), updates);
       } else {
         await addDoc(collectionRef, {
           ...formData,
+          totalRevenue: payment,
+          lastPaymentAmount: payment,
           createdAt: serverTimestamp(),
         });
       }
@@ -953,6 +1203,7 @@ export default function App() {
       newExpiryDate: defaultNewExpiry.toISOString().split("T")[0],
       baseDateUsed: baseDate,
       isReactivation: currentExpiry < today,
+      paymentAmount: 0,
     });
   };
 
@@ -969,10 +1220,15 @@ export default function App() {
   const confirmRenewal = async () => {
     if (!renewingClient || !user) return;
     try {
+      const payment = parseFloat(renewalData.paymentAmount) || 0;
+      const newTotal = (renewingClient.totalRevenue || 0) + payment;
+
       const updates = {
         expiryDate: renewalData.newExpiryDate,
         renewals: (parseInt(renewingClient.renewals) || 0) + 1,
+        totalRevenue: newTotal,
       };
+      if (payment > 0) updates.lastPaymentAmount = payment;
       if (renewalData.isReactivation)
         updates.startDate = renewalData.baseDateUsed
           .toISOString()
@@ -1090,9 +1346,8 @@ export default function App() {
         type: "text/csv;charset=utf-8;",
       })
     );
-    link.download = `clientes_nexuscrm_${
-      new Date().toISOString().split("T")[0]
-    }.csv`;
+    link.download = `clientes_nexuscrm_${new Date().toISOString().split("T")[0]
+      }.csv`;
     link.click();
     document.body.removeChild(link);
   };
@@ -1140,7 +1395,7 @@ export default function App() {
   const openModal = (client = null) => {
     if (client) {
       setEditingClient(client);
-      setFormData({ ...client, password: client.password || "" });
+      setFormData({ ...client, password: client.password || "", paymentAmount: 0 });
     } else {
       setEditingClient(null);
       const today = new Date();
@@ -1160,6 +1415,7 @@ export default function App() {
         startDate: today.toISOString().split("T")[0],
         expiryDate: nextMonth.toISOString().split("T")[0],
         renewals: 1,
+        paymentAmount: 0,
       });
     }
     setShowModal(true);
@@ -1209,8 +1465,8 @@ export default function App() {
       sortOption === "name"
         ? a.name.localeCompare(b.name)
         : sortOption === "platform"
-        ? a.platform.localeCompare(b.platform)
-        : new Date(a.expiryDate) - new Date(b.expiryDate)
+          ? a.platform.localeCompare(b.platform)
+          : new Date(a.expiryDate) - new Date(b.expiryDate)
     );
     return result;
   }, [clients, searchTerm, filterStatus, sortOption]);
@@ -1408,6 +1664,9 @@ export default function App() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto p-3 md:p-6 space-y-4 md:space-y-6">
         {/* Stats Grid - Responsive Grid */}
+        {/* Stats Grid - Responsive Grid */}
+        <AnalyticsDashboard clients={clients} />
+
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
           <StatsCard
             title="Total Clientes"
@@ -1531,6 +1790,7 @@ export default function App() {
                   <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">Usuario</th>
                   <th className="px-4 py-3">Nombre</th>
+                  <th className="px-4 py-3">Pago</th>
                   <th className="px-4 py-3">Expiración</th>
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
@@ -1601,14 +1861,22 @@ export default function App() {
                         </div>
                       </td>
                       <td className="px-4 py-3 align-middle">
+                        {client.lastPaymentAmount > 0 ? (
+                          <span className="text-emerald-400 font-bold text-xs bg-emerald-900/20 px-2 py-1 rounded border border-emerald-900/30">
+                            ${client.lastPaymentAmount}
+                          </span>
+                        ) : (
+                          <span className="text-slate-600 text-xs">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-middle">
                         <span
-                          className={`font-bold text-xs ${
-                            isExpired
-                              ? "text-rose-400"
-                              : isExpiringSoon
+                          className={`font-bold text-xs ${isExpired
+                            ? "text-rose-400"
+                            : isExpiringSoon
                               ? "text-yellow-400"
                               : "text-slate-300"
-                          }`}
+                            }`}
                         >
                           {formatDate(client.expiryDate)}
                         </span>
@@ -1725,11 +1993,10 @@ export default function App() {
             <div className="flex border-b border-slate-800">
               <button
                 onClick={() => setSettingsTab("platforms")}
-                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${
-                  settingsTab === "platforms"
-                    ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
+                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${settingsTab === "platforms"
+                  ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
+                  : "text-slate-400 hover:text-slate-200"
+                  }`}
               >
                 <div className="flex items-center justify-center gap-2">
                   <Tv className="w-4 h-4" />{" "}
@@ -1738,11 +2005,10 @@ export default function App() {
               </button>
               <button
                 onClick={() => setSettingsTab("messages")}
-                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${
-                  settingsTab === "messages"
-                    ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
+                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${settingsTab === "messages"
+                  ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
+                  : "text-slate-400 hover:text-slate-200"
+                  }`}
               >
                 <div className="flex items-center justify-center gap-2">
                   <MessageSquare className="w-4 h-4" />{" "}
@@ -1751,11 +2017,10 @@ export default function App() {
               </button>
               <button
                 onClick={() => setSettingsTab("notifications")}
-                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${
-                  settingsTab === "notifications"
-                    ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
+                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${settingsTab === "notifications"
+                  ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
+                  : "text-slate-400 hover:text-slate-200"
+                  }`}
               >
                 <div className="flex items-center justify-center gap-2">
                   <Bell className="w-4 h-4" />{" "}
@@ -1993,18 +2258,16 @@ export default function App() {
                       onClick={() =>
                         toggleNotificationPreference("checkIn15Days")
                       }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        userNotificationPrefs.checkIn15Days
-                          ? "bg-blue-600"
-                          : "bg-slate-700"
-                      }`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${userNotificationPrefs.checkIn15Days
+                        ? "bg-blue-600"
+                        : "bg-slate-700"
+                        }`}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          userNotificationPrefs.checkIn15Days
-                            ? "translate-x-6"
-                            : "translate-x-1"
-                        }`}
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${userNotificationPrefs.checkIn15Days
+                          ? "translate-x-6"
+                          : "translate-x-1"
+                          }`}
                       />
                     </button>
                   </div>
@@ -2023,18 +2286,16 @@ export default function App() {
                       onClick={() =>
                         toggleNotificationPreference("reminderTomorrow")
                       }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        userNotificationPrefs.reminderTomorrow
-                          ? "bg-blue-600"
-                          : "bg-slate-700"
-                      }`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${userNotificationPrefs.reminderTomorrow
+                        ? "bg-blue-600"
+                        : "bg-slate-700"
+                        }`}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          userNotificationPrefs.reminderTomorrow
-                            ? "translate-x-6"
-                            : "translate-x-1"
-                        }`}
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${userNotificationPrefs.reminderTomorrow
+                          ? "translate-x-6"
+                          : "translate-x-1"
+                          }`}
                       />
                     </button>
                   </div>
@@ -2053,18 +2314,16 @@ export default function App() {
                       onClick={() =>
                         toggleNotificationPreference("recovery15Days")
                       }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        userNotificationPrefs.recovery15Days
-                          ? "bg-blue-600"
-                          : "bg-slate-700"
-                      }`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${userNotificationPrefs.recovery15Days
+                        ? "bg-blue-600"
+                        : "bg-slate-700"
+                        }`}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          userNotificationPrefs.recovery15Days
-                            ? "translate-x-6"
-                            : "translate-x-1"
-                        }`}
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${userNotificationPrefs.recovery15Days
+                          ? "translate-x-6"
+                          : "translate-x-1"
+                          }`}
                       />
                     </button>
                   </div>
@@ -2093,6 +2352,23 @@ export default function App() {
                 })
               }
             />
+            <div className="mb-4">
+              <label className="block text-xs text-slate-400 mb-1 uppercase font-bold">
+                Monto Pagado ($)
+              </label>
+              <input
+                type="number"
+                className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white font-bold text-lg"
+                placeholder="0.00"
+                value={renewalData.paymentAmount}
+                onChange={(e) =>
+                  setRenewalData({
+                    ...renewalData,
+                    paymentAmount: e.target.value,
+                  })
+                }
+              />
+            </div>
             <div className="grid grid-cols-3 gap-2 mb-4">
               <button
                 onClick={() => applyRenewalPreset(1)}
@@ -2139,11 +2415,10 @@ export default function App() {
             <div className="p-4 md:p-6 border-b border-slate-800 bg-slate-900 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3 md:gap-4">
                 <div
-                  className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg ${
-                    userPlatforms.find(
-                      (p) => p.id === viewDetailsClient.platform
-                    )?.color || "bg-slate-700"
-                  }`}
+                  className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg ${userPlatforms.find(
+                    (p) => p.id === viewDetailsClient.platform
+                  )?.color || "bg-slate-700"
+                    }`}
                 >
                   <Monitor className="w-6 h-6 md:w-8 md:h-8 text-white" />
                 </div>
@@ -2249,11 +2524,10 @@ export default function App() {
                       Expiración
                     </label>
                     <p
-                      className={`text-xl md:text-2xl font-bold ${
-                        getDaysRemaining(viewDetailsClient.expiryDate) < 0
-                          ? "text-rose-500"
-                          : "text-emerald-400"
-                      }`}
+                      className={`text-xl md:text-2xl font-bold ${getDaysRemaining(viewDetailsClient.expiryDate) < 0
+                        ? "text-rose-500"
+                        : "text-emerald-400"
+                        }`}
                     >
                       {formatDate(viewDetailsClient.expiryDate)}
                     </p>
@@ -2261,8 +2535,8 @@ export default function App() {
                       {getDaysRemaining(viewDetailsClient.expiryDate) < 0
                         ? "Servicio Vencido"
                         : `${getDaysRemaining(
-                            viewDetailsClient.expiryDate
-                          )} días restantes`}
+                          viewDetailsClient.expiryDate
+                        )} días restantes`}
                     </p>
                   </div>
                 </div>
@@ -2410,20 +2684,18 @@ export default function App() {
                 return (
                   <div
                     key={c.id}
-                    className={`p-4 transition-all duration-300 rounded border border-slate-700 ${
-                      isCompleted
-                        ? "bg-slate-900/30 opacity-50 scale-[0.98]"
-                        : "bg-slate-800"
-                    }`}
+                    className={`p-4 transition-all duration-300 rounded border border-slate-700 ${isCompleted
+                      ? "bg-slate-900/30 opacity-50 scale-[0.98]"
+                      : "bg-slate-800"
+                      }`}
                   >
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <p
-                          className={`font-bold text-sm ${
-                            isCompleted
-                              ? "text-slate-500 line-through"
-                              : "text-white"
-                          }`}
+                          className={`font-bold text-sm ${isCompleted
+                            ? "text-slate-500 line-through"
+                            : "text-white"
+                            }`}
                         >
                           {c.name}
                         </p>
@@ -2444,11 +2716,10 @@ export default function App() {
                         <button
                           onClick={() => openWhatsApp(c, type)}
                           disabled={isCompleted}
-                          className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                            isCompleted
-                              ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
-                              : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:scale-[1.02]"
-                          }`}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${isCompleted
+                            ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
+                            : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:scale-[1.02]"
+                            }`}
                         >
                           <MessageCircle className="w-4 h-4" />
                           WhatsApp
@@ -2460,11 +2731,10 @@ export default function App() {
                       )}
                       <button
                         onClick={() => toggleCompleteTask(c.id)}
-                        className={`px-3 py-2 rounded-lg border transition-all ${
-                          isCompleted
-                            ? "bg-blue-600/20 text-blue-400 border-blue-600/50 hover:bg-blue-600/30"
-                            : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
-                        }`}
+                        className={`px-3 py-2 rounded-lg border transition-all ${isCompleted
+                          ? "bg-blue-600/20 text-blue-400 border-blue-600/50 hover:bg-blue-600/30"
+                          : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
+                          }`}
                         title={
                           isCompleted
                             ? "Desmarcar"
@@ -2536,7 +2806,7 @@ export default function App() {
 
               <div>
                 <label className="block text-xs text-slate-400 mb-1">
-                  ID (Opcional)
+                  ID (Opcional) --
                 </label>
                 <input
                   type="text"
@@ -2638,6 +2908,22 @@ export default function App() {
                   />
                 </div>
               </div>
+
+              <div>
+                <label className="block text-xs text-emerald-400 mb-1 font-bold">
+                  MONTO PAGADO ($) {editingClient ? "- AGREGAR AL TOTAL" : ""}
+                </label>
+                <input
+                  type="number"
+                  className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white font-bold"
+                  placeholder="0.00"
+                  value={formData.paymentAmount}
+                  onChange={(e) =>
+                    setFormData({ ...formData, paymentAmount: e.target.value })
+                  }
+                />
+              </div>
+
               <button
                 type="submit"
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg mt-4"
