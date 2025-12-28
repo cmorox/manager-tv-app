@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   Users,
   Search,
@@ -578,6 +578,7 @@ export default function App() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortOption, setSortOption] = useState("expiryDate");
   const fileInputRef = useRef(null);
+  const sampleDataLoadedRef = useRef(false); // Para rastrear si ya se cargaron datos de prueba
 
   const [formData, setFormData] = useState({
     platform: "LOTV",
@@ -621,6 +622,8 @@ export default function App() {
         }
       };
       registerUser();
+      // Resetear el flag cuando cambia el usuario para permitir carga de datos de prueba
+      sampleDataLoadedRef.current = false;
     }
   }, [user]);
 
@@ -658,6 +661,51 @@ export default function App() {
     fetchSettings();
   }, [user]);
 
+  // Función para cargar datos de prueba automáticamente
+  const loadSampleData = useCallback(async () => {
+    if (!user || viewingAsUser || sampleDataLoadedRef.current) return;
+    
+    try {
+      const response = await fetch("/datos_prueba.csv");
+      const csvText = await response.text();
+      const lines = csvText.split("\n");
+      const newClients = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].trim().split(",");
+        if (cols.length >= 8 && cols[0]?.trim()) {
+          newClients.push({
+            platform: cols[1]?.replace(/"/g, "").trim() || "OTRO",
+            customId: cols[2]?.replace(/"/g, "").trim() || "",
+            username: cols[3]?.replace(/"/g, "").trim() || "Sin Usuario",
+            name: cols[4]?.replace(/"/g, "").trim() || "Sin Nombre",
+            expiryDate: parseCSVDate(cols[5]?.replace(/"/g, "")),
+            startDate: parseCSVDate(cols[6]?.replace(/"/g, "")),
+            contact: cols[7]?.replace(/"/g, "").trim() || "",
+            connections: parseInt(cols[8]?.replace(/"/g, "")) || 1,
+            renewals: parseInt(cols[9]?.replace(/"/g, "")) || 1,
+            password: "",
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+      
+      if (newClients.length > 0) {
+        const batch = writeBatch(db);
+        const targetUid = user.uid;
+        const collectionRef = collection(db, "artifacts", appId, "users", targetUid, "clients");
+        // Limitar a 500 documentos por batch (límite de Firestore)
+        newClients.slice(0, 500).forEach((c) => {
+          batch.set(doc(collectionRef), c);
+        });
+        await batch.commit();
+        sampleDataLoadedRef.current = true;
+      }
+    } catch (error) {
+      console.error("Error cargando datos de prueba:", error);
+    }
+  }, [user, viewingAsUser]);
+
   // Clientes
   useEffect(() => {
     if (!user) {
@@ -671,13 +719,23 @@ export default function App() {
     );
     const unsubscribe = onSnapshot(
       q,
-      (snapshot) => {
+      async (snapshot) => {
         const clientsData = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
         setClients(clientsData);
         setLoading(false);
+        
+        // Cargar datos de prueba automáticamente si el usuario no tiene clientes
+        // y no se está viendo como otro usuario
+        if (
+          clientsData.length === 0 &&
+          !viewingAsUser &&
+          !sampleDataLoadedRef.current
+        ) {
+          loadSampleData();
+        }
       },
       (error) => {
         console.error(error);
@@ -685,7 +743,7 @@ export default function App() {
       }
     );
     return () => unsubscribe();
-  }, [user, viewingAsUser]);
+  }, [user, viewingAsUser, loadSampleData]);
 
   useEffect(() => {
     if (isAdmin && showAdminPanel) {
