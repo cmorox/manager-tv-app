@@ -93,7 +93,7 @@ let app;
 try {
   app = initializeApp(firebaseConfig);
 } catch (e) {
-  app = initializeApp(firebaseConfig, "PROVIEW_APP_" + Math.random());
+  app = initializeApp(firebaseConfig, "NEXUSCRM_APP_" + Math.random());
 }
 
 const auth = getAuth(app);
@@ -187,7 +187,7 @@ const parseCSVDate = (dateStr) => {
     }
     const d = new Date(cleanDateStr);
     if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
-  } catch (e) {}
+  } catch (e) {}image.png
   return new Date().toISOString().split("T")[0];
 };
 
@@ -441,7 +441,7 @@ function LoginScreen() {
             <Monitor className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight">
-            Proview TV
+            NexusCRM
           </h1>
           <p className="text-slate-400 text-sm mt-1">Plataforma de Gestión</p>
         </div>
@@ -816,7 +816,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "plantilla_importacion_proview.csv");
+    link.setAttribute("download", "plantilla_importacion_nexuscrm.csv");
     link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
@@ -1032,7 +1032,7 @@ export default function App() {
         type: "text/csv;charset=utf-8;",
       })
     );
-    link.download = `clientes_proview_${
+    link.download = `clientes_nexuscrm_${
       new Date().toISOString().split("T")[0]
     }.csv`;
     link.click();
@@ -1236,7 +1236,7 @@ export default function App() {
             <div className="flex-1 overflow-hidden">
               <div className="flex items-center gap-2">
                 <h1 className="text-lg md:text-xl font-bold tracking-tight text-white whitespace-nowrap">
-                  Proview TV
+                  NexusCRM
                 </h1>
                 {isAdmin ? (
                   <span className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 shrink-0">
