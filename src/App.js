@@ -567,7 +567,7 @@ const AnalyticsDashboard = ({ clients }) => {
                       ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                       : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                       }`}>
-                      {days === 0 ? 'HOY' : `${days}d`}
+                      {days === 0 ? 'Vence hoy' : days === 1 ? 'Vence en 1 día' : `Vence en ${days} días`}
                     </div>
                   </div>
                 );
