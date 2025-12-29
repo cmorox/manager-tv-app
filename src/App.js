@@ -47,6 +47,7 @@ import {
   Trash, // Nuevo icono para borrar completados
   AlertTriangle, // Nuevo icono para alarma de vencidos
   DollarSign,
+  LayoutDashboard,
 } from "lucide-react";
 import {
   PieChart,
@@ -57,6 +58,10 @@ import {
   Legend,
   BarChart,
   Bar,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -414,9 +419,99 @@ const VariableToolbar = ({ onInsert }) => (
   </div>
 );
 
+// --- COMPONENTE ATTENTION SECTION ---
+const AttentionSection = ({ clients, openWhatsApp, toggleCompleteTask, completedTasks }) => {
+  const upcoming = useMemo(() => {
+    return clients
+      .filter((c) => {
+        const d = getDaysRemaining(c.expiryDate);
+        return d >= 0 && d <= 3;
+      })
+      .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate))
+      .slice(0, 5);
+  }, [clients]);
+
+  return (
+    <div className="bg-[#111827] p-4 md:p-5 rounded-xl md:rounded-2xl border border-gray-800 shadow-xl flex flex-col relative overflow-hidden min-h-[160px] mb-6">
+      <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
+        <div className="p-2 bg-amber-500/10 rounded-lg md:rounded-xl text-amber-400 border border-amber-500/20">
+          <AlertTriangle className="w-4 h-4 md:w-5 md:h-5" />
+        </div>
+        <h3 className="text-gray-400 text-[10px] md:text-xs font-bold uppercase tracking-wider">
+          Atención
+        </h3>
+        <span className="ml-auto bg-amber-500/10 text-amber-400 text-[9px] md:text-[10px] font-bold px-1.5 md:px-2 py-0.5 rounded-full border border-amber-500/20">
+          {upcoming.length}
+        </span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 -mr-1 max-h-[150px] md:max-h-none">
+        {upcoming.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-gray-600 space-y-2 py-4">
+            <CheckCircle className="w-6 h-6 md:w-8 md:h-8 opacity-50" />
+            <p className="text-[10px] md:text-xs font-medium">Todo en orden</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {upcoming.map((client) => {
+              const days = getDaysRemaining(client.expiryDate);
+              const isCompleted = completedTasks.includes(client.id);
+
+              // Determine message type based on days
+              let msgType = "default";
+              if (days === 1) msgType = "reminderTomorrow";
+              else if (days === 0) msgType = "default"; // Will fall into <= 5 logic in openWhatsApp
+
+              return (
+                <div key={client.id} className={`flex items-center justify-between p-2 md:p-2.5 rounded-lg md:rounded-xl border transition-colors group ${isCompleted ? 'bg-slate-900/30 border-slate-800 opacity-60' : 'bg-gray-900/50 border-gray-800 hover:border-gray-700'}`}>
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <button
+                      onClick={() => toggleCompleteTask(client.id)}
+                      className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-600 hover:border-emerald-500'}`}
+                    >
+                      {isCompleted && <Check className="w-3 h-3" />}
+                    </button>
+
+                    <div className="min-w-0">
+                      <p className={`text-xs md:text-sm font-bold truncate transition-colors ${isCompleted ? 'text-slate-500 line-through' : 'text-gray-200 group-hover:text-white'}`}>
+                        {client.name}
+                      </p>
+                      <p className="text-[9px] md:text-[10px] text-gray-500 uppercase font-bold truncate">
+                        {client.platform}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className={`text-right px-1.5 md:px-2 py-0.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-xs font-bold border ${days <= 1
+                      ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                      : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>
+                      {days === 0 ? 'Vence hoy' : days === 1 ? 'Vence en 1 día' : `Vence en ${days} días`}
+                    </div>
+
+                    <button
+                      onClick={() => openWhatsApp(client, msgType)}
+                      className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                      title="Enviar WhatsApp"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // --- COMPONENTE ANALYTICS DASHBOARD ---
 const AnalyticsDashboard = ({ clients }) => {
-  const data = useMemo(() => {
+  // 1. Platform Distribution Data
+  const platformData = useMemo(() => {
     const platformCounts = {};
     clients.forEach((c) => {
       const p = c.platform || "OTRO";
@@ -428,30 +523,22 @@ const AnalyticsDashboard = ({ clients }) => {
     }));
   }, [clients]);
 
-  const totalRevenue = useMemo(() => {
-    return clients.reduce((acc, curr) => acc + (curr.totalRevenue || 0), 0);
+  // 2. Financial Metrics
+  const { estimatedRevenue, activeClientsCount, arpu } = useMemo(() => {
+    const activeClients = clients.filter((c) => getDaysRemaining(c.expiryDate) >= 0);
+    const revenue = activeClients.reduce((acc, curr) => acc + (curr.lastPaymentAmount || 0), 0);
+    const count = activeClients.length;
+    return {
+      estimatedRevenue: revenue,
+      activeClientsCount: count,
+      arpu: count > 0 ? Math.round(revenue / count) : 0
+    };
   }, [clients]);
 
-  const estimatedRevenue = useMemo(() => {
-    return clients
-      .filter((c) => getDaysRemaining(c.expiryDate) >= 0)
-      .reduce((acc, curr) => acc + (curr.lastPaymentAmount || 0), 0);
-  }, [clients]);
-
-  const upcoming = useMemo(() => {
-    return clients
-      .filter((c) => {
-        const d = getDaysRemaining(c.expiryDate);
-        return d >= 0 && d <= 3;
-      })
-      .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate))
-      .slice(0, 5);
-  }, [clients]);
-
+  // 3. Platform Revenue Data (Top 5)
   const platformRevenue = useMemo(() => {
     const revenue = {};
     clients.forEach((c) => {
-      // Consideramos solo clientes activos para el desglose mensual
       if (getDaysRemaining(c.expiryDate) >= 0) {
         const p = c.platform || "OTRO";
         revenue[p] = (revenue[p] || 0) + (c.lastPaymentAmount || 0);
@@ -466,167 +553,214 @@ const AnalyticsDashboard = ({ clients }) => {
       .slice(0, 5);
   }, [clients]);
 
+  // 4. Client Growth (Cumulative over last 6 months)
+  const growthData = useMemo(() => {
+    const months = {};
+    const today = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const key = d.toLocaleString('default', { month: 'short' });
+      months[key] = 0;
+    }
+
+    // Sort clients by start date
+    const sortedClients = [...clients].sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+
+    let cumulative = 0;
+    // This is a simplified cumulative calculation assuming we have start dates
+    // Ideally we would filter by month, but for now let's just count total active over time simulation
+    // Or better: Expirations Forecast which is more actionable
+    return Object.keys(months).map(m => ({ name: m, value: Math.floor(Math.random() * 10) + cumulative++ * 5 })); // Placeholder logic if no historical data
+  }, [clients]);
+
+  // Better Logic: Expirations Forecast (Next 4 Weeks)
+  const expirationsForecast = useMemo(() => {
+    const weeks = [
+      { name: 'Sem 1', count: 0, revenue: 0 },
+      { name: 'Sem 2', count: 0, revenue: 0 },
+      { name: 'Sem 3', count: 0, revenue: 0 },
+      { name: 'Sem 4', count: 0, revenue: 0 },
+    ];
+
+    clients.forEach(c => {
+      const days = getDaysRemaining(c.expiryDate);
+      if (days >= 0 && days <= 28) {
+        const weekIndex = Math.floor(days / 7);
+        if (weekIndex < 4) {
+          weeks[weekIndex].count += 1;
+          weeks[weekIndex].revenue += (c.lastPaymentAmount || 0);
+        }
+      }
+    });
+    return weeks;
+  }, [clients]);
+
   const CHART_COLORS = [
-    "#3b82f6", // blue
-    "#ef4444", // red
-    "#10b981", // emerald
-    "#f59e0b", // amber
-    "#8b5cf6", // violet
-    "#ec4899", // pink
-    "#06b6d4", // cyan
-    "#f97316", // orange
+    "#06b6d4", "#8b5cf6", "#10b981", "#f43f5e", "#f59e0b", "#3b82f6", "#ec4899", "#6366f1"
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-4 md:mb-6">
-      {/* Col 1: Finanzas (Mensual + Gráfica) */}
-      <div className="bg-[#111827] p-4 md:p-5 rounded-xl md:rounded-2xl border border-gray-800 shadow-xl flex flex-col relative overflow-hidden group min-h-[160px]">
-        <div className="absolute top-0 right-0 w-24 md:w-32 h-24 md:h-32 bg-emerald-500/5 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-emerald-500/10"></div>
-
-        <div className="relative z-10 flex flex-col h-full">
-          <div className="flex items-center gap-2 md:gap-3 mb-4">
-            <div className="p-2 bg-emerald-500/10 rounded-lg md:rounded-xl text-emerald-400 border border-emerald-500/20">
-              <DollarSign className="w-4 h-4 md:w-5 md:h-5" />
+    <div className="space-y-4 md:space-y-6">
+      {/* KPI Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="bg-[#0f172a]/60 backdrop-blur-xl p-4 rounded-2xl border border-cyan-500/10 shadow-[0_0_15px_-3px_rgba(6,182,212,0.1)] hover:shadow-[0_0_20px_-3px_rgba(6,182,212,0.2)] hover:border-cyan-500/30 transition-all duration-300 group">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-cyan-500/10 rounded-xl text-cyan-400 group-hover:scale-110 group-hover:bg-cyan-500/20 transition-all duration-300 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+              <DollarSign className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="text-gray-400 text-[10px] md:text-xs font-bold uppercase tracking-wider">
-                Ingreso Mensual
-              </h3>
-              <p className="text-2xl md:text-3xl font-bold text-white tracking-tight">
-                ${estimatedRevenue.toLocaleString()}
-              </p>
+            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider group-hover:text-cyan-200 transition-colors">Ingreso Mensual</span>
+          </div>
+          <p className="text-2xl font-bold text-white tracking-tight drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]">${estimatedRevenue.toLocaleString()}</p>
+        </div>
+
+        <div className="bg-[#0f172a]/60 backdrop-blur-xl p-4 rounded-2xl border border-violet-500/10 shadow-[0_0_15px_-3px_rgba(139,92,246,0.1)] hover:shadow-[0_0_20px_-3px_rgba(139,92,246,0.2)] hover:border-violet-500/30 transition-all duration-300 group">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-violet-500/10 rounded-xl text-violet-400 group-hover:scale-110 group-hover:bg-violet-500/20 transition-all duration-300 shadow-[0_0_10px_rgba(139,92,246,0.2)]">
+              <Users className="w-4 h-4" />
+            </div>
+            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider group-hover:text-violet-200 transition-colors">Clientes Activos</span>
+          </div>
+          <p className="text-2xl font-bold text-white tracking-tight drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]">{activeClientsCount}</p>
+        </div>
+
+        <div className="bg-[#0f172a]/60 backdrop-blur-xl p-4 rounded-2xl border border-emerald-500/10 shadow-[0_0_15px_-3px_rgba(16,185,129,0.1)] hover:shadow-[0_0_20px_-3px_rgba(16,185,129,0.2)] hover:border-emerald-500/30 transition-all duration-300 group">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-emerald-500/10 rounded-xl text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-500/20 transition-all duration-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+              <Activity className="w-4 h-4" />
+            </div>
+            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider group-hover:text-emerald-200 transition-colors">Promedio / Cliente</span>
+          </div>
+          <p className="text-2xl font-bold text-white tracking-tight drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]">${arpu}</p>
+        </div>
+
+        <div className="bg-[#0f172a]/60 backdrop-blur-xl p-4 rounded-2xl border border-rose-500/10 shadow-[0_0_15px_-3px_rgba(244,63,94,0.1)] hover:shadow-[0_0_20px_-3px_rgba(244,63,94,0.2)] hover:border-rose-500/30 transition-all duration-300 group">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-rose-500/10 rounded-xl text-rose-400 group-hover:scale-110 group-hover:bg-rose-500/20 transition-all duration-300 shadow-[0_0_10px_rgba(244,63,94,0.2)]">
+              <AlertCircle className="w-4 h-4" />
+            </div>
+            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider group-hover:text-rose-200 transition-colors">Por Vencer (30d)</span>
+          </div>
+          <p className="text-2xl font-bold text-white tracking-tight drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]">
+            {clients.filter(c => {
+              const d = getDaysRemaining(c.expiryDate);
+              return d >= 0 && d <= 30;
+            }).length}
+          </p>
+        </div>
+      </div>
+
+      {/* Main Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+
+        {/* Revenue Forecast Chart (Large) */}
+        <div className="lg:col-span-2 bg-[#0f172a]/60 backdrop-blur-xl p-5 rounded-3xl border border-cyan-500/10 shadow-[0_0_20px_-5px_rgba(6,182,212,0.05)]">
+          <h3 className="text-slate-300 font-bold text-sm mb-6 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-cyan-400" /> <span className="tracking-wide">PROYECCIÓN DE RENOVACIONES</span>
+          </h3>
+          <div className="h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={expirationsForecast}>
+                <defs>
+                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} dy={10} />
+                <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} dx={-10} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#020617', borderColor: '#06b6d4', color: '#fff', borderRadius: '12px', boxShadow: '0 0 20px rgba(6,182,212,0.2)' }}
+                  formatter={(value) => [`$${value}`, 'Ingreso Estimado']}
+                  cursor={{ stroke: '#06b6d4', strokeWidth: 1, strokeDasharray: '5 5' }}
+                />
+                <Area type="monotone" dataKey="revenue" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Platform Distribution (Pie) */}
+        <div className="bg-[#0f172a]/60 backdrop-blur-xl p-5 rounded-3xl border border-violet-500/10 shadow-[0_0_20px_-5px_rgba(139,92,246,0.05)] flex flex-col">
+          <h3 className="text-slate-300 font-bold text-sm mb-4 flex items-center gap-2">
+            <PieChart className="w-4 h-4 text-violet-400" /> <span className="tracking-wide">DISTRIBUCIÓN</span>
+          </h3>
+          <div className="flex-1 min-h-[200px] relative">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={platformData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {platformData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} stroke="rgba(0,0,0,0.2)" strokeWidth={2} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#020617', borderColor: '#8b5cf6', color: '#fff', borderRadius: '12px', boxShadow: '0 0 20px rgba(139,92,246,0.2)' }}
+                  itemStyle={{ color: '#fff' }}
+                />
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  iconType="circle"
+                  formatter={(value) => <span className="text-slate-400 text-xs ml-1 font-medium">{value}</span>}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            {/* Center Text */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-8">
+              <span className="text-3xl font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">{clients.length}</span>
+              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Total</span>
             </div>
           </div>
+        </div>
 
-          <div className="flex-1 min-h-[120px] w-full">
+        {/* Top Platforms Revenue (Bar) */}
+        <div className="lg:col-span-3 bg-[#0f172a]/60 backdrop-blur-xl p-5 rounded-3xl border border-emerald-500/10 shadow-[0_0_20px_-5px_rgba(16,185,129,0.05)]">
+          <h3 className="text-slate-300 font-bold text-sm mb-6 flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-emerald-400" /> <span className="tracking-wide">TOP INGRESOS</span>
+          </h3>
+          <div className="h-[200px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={platformRevenue} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <BarChart data={platformRevenue} layout="vertical" margin={{ top: 0, right: 30, left: 20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
                 <XAxis type="number" hide />
                 <YAxis
                   dataKey="name"
                   type="category"
-                  width={60}
-                  tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 'bold' }}
+                  width={100}
+                  tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 600 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <Tooltip
-                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{
-                    backgroundColor: "#1f2937",
-                    borderColor: "#374151",
-                    color: "#f3f4f6",
-                    borderRadius: "0.5rem",
-                    fontSize: "12px",
-                  }}
-                  itemStyle={{ color: "#10b981" }}
+                  cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                  contentStyle={{ backgroundColor: '#020617', borderColor: '#10b981', color: '#fff', borderRadius: '12px', boxShadow: '0 0 20px rgba(16,185,129,0.2)' }}
                   formatter={(value) => [`$${value}`, 'Ingresos']}
                 />
-                <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={12} />
+                <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={20}>
+                  {platformRevenue.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={index < 3 ? '#10b981' : '#059669'} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
-
-      {/* Col 2: Atención Requerida */}
-      <div className="bg-[#111827] p-4 md:p-5 rounded-xl md:rounded-2xl border border-gray-800 shadow-xl flex flex-col relative overflow-hidden min-h-[160px]">
-        <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
-          <div className="p-2 bg-amber-500/10 rounded-lg md:rounded-xl text-amber-400 border border-amber-500/20">
-            <AlertTriangle className="w-4 h-4 md:w-5 md:h-5" />
-          </div>
-          <h3 className="text-gray-400 text-[10px] md:text-xs font-bold uppercase tracking-wider">
-            Atención
-          </h3>
-          <span className="ml-auto bg-amber-500/10 text-amber-400 text-[9px] md:text-[10px] font-bold px-1.5 md:px-2 py-0.5 rounded-full border border-amber-500/20">
-            {upcoming.length}
-          </span>
-        </div>
-
-        <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 -mr-1 max-h-[150px] md:max-h-none">
-          {upcoming.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-gray-600 space-y-2 py-4">
-              <CheckCircle className="w-6 h-6 md:w-8 md:h-8 opacity-50" />
-              <p className="text-[10px] md:text-xs font-medium">Todo en orden</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {upcoming.map((client) => {
-                const days = getDaysRemaining(client.expiryDate);
-                return (
-                  <div key={client.id} className="flex items-center justify-between p-2 md:p-2.5 rounded-lg md:rounded-xl bg-gray-900/50 border border-gray-800 hover:border-gray-700 transition-colors group">
-                    <div className="min-w-0">
-                      <p className="text-xs md:text-sm font-bold text-gray-200 truncate group-hover:text-white transition-colors">
-                        {client.name}
-                      </p>
-                      <p className="text-[9px] md:text-[10px] text-gray-500 uppercase font-bold truncate">
-                        {client.platform}
-                      </p>
-                    </div>
-                    <div className={`text-right px-1.5 md:px-2 py-0.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-xs font-bold border ${days <= 1
-                      ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                      : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      }`}>
-                      {days === 0 ? 'Vence hoy' : days === 1 ? 'Vence en 1 día' : `Vence en ${days} días`}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Col 3: Distribución (Pie Chart) */}
-      <div className="bg-[#111827] p-4 md:p-5 rounded-xl md:rounded-2xl border border-gray-800 shadow-xl flex flex-col items-center justify-center relative md:col-span-2 lg:col-span-1 min-h-[160px]">
-        <h3 className="absolute top-4 left-4 md:top-5 md:left-5 text-gray-400 text-[10px] md:text-xs font-bold uppercase tracking-wider">
-          Plataformas
-        </h3>
-        <div className="w-full h-[140px] md:h-[160px] mt-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={45}
-                outerRadius={65}
-                paddingAngle={4}
-                dataKey="value"
-                stroke="none"
-              >
-                {data.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={CHART_COLORS[index % CHART_COLORS.length]}
-                  />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1f2937",
-                  borderColor: "#374151",
-                  color: "#f3f4f6",
-                  borderRadius: "0.5rem",
-                  fontSize: "12px",
-                  boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
-                }}
-                itemStyle={{ color: "#f3f4f6" }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        {/* Centro del Pie Chart */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none mt-4">
-          <div className="text-center">
-            <span className="text-xl md:text-2xl font-bold text-white">{clients.length}</span>
-            <p className="text-[8px] md:text-[9px] text-gray-500 uppercase font-bold">Total</p>
-          </div>
-        </div>
-      </div>
-    </div >
+    </div>
   );
 };
+
+
+
 
 // --- COMPONENTE LOGIN ---
 function LoginScreen() {
@@ -766,12 +900,222 @@ function LoginScreen() {
   );
 }
 
+// --- COMPONENTE SIDEBAR ---
+
+const SidebarItem = ({
+  icon,
+  label,
+  onClick,
+  active,
+  badge,
+  colorClass,
+}) => (
+  <button
+    onClick={onClick}
+    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${active
+      ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.3)] border border-cyan-400/20"
+      : "text-slate-400 hover:bg-white/5 hover:text-cyan-200"
+      } ${colorClass || ""}`}
+  >
+    <div
+      className={`${active ? "text-white" : "text-slate-500 group-hover:text-cyan-400 transition-colors"
+        }`}
+    >
+      {icon}
+    </div>
+    <span className="font-medium text-sm tracking-wide">{label}</span>
+    {badge > 0 && (
+      <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.4)]">
+        {badge}
+      </span>
+    )}
+  </button>
+);
+
+const Sidebar = ({
+  isOpen,
+  setIsOpen,
+  activeSection,
+  setActiveSection,
+  user,
+  isAdmin,
+  viewingAsUser,
+  setViewingAsUser,
+  setShowAdminPanel,
+  setShowSettings,
+  setShowNotifications,
+  activeNotificationsCount,
+  handleDownloadTemplate,
+  triggerFileUpload,
+  handleExportCSV,
+  handleDeleteAll,
+  handleLogout,
+}) => {
+  return (
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/80 z-40 md:hidden backdrop-blur-sm"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Container */}
+      <div
+        className={`
+        fixed md:static inset-y-0 left-0 z-50
+        w-64 bg-[#020617] border-r border-cyan-500/10
+        transform transition-transform duration-300 ease-in-out
+        ${isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+        flex flex-col bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-blue-900/10 via-[#020617] to-black
+      `}
+      >
+
+
+        {/* App Header / User Info */}
+        <div className="p-4 border-b border-cyan-500/10 bg-cyan-950/10 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-cyan-600 flex items-center justify-center text-white shadow-[0_0_15px_rgba(8,145,178,0.4)]">
+              <Monitor className="w-5 h-5" />
+            </div>
+            <div className="overflow-hidden">
+              <h1 className="text-sm font-bold text-white truncate tracking-wide">
+                NexusCRM
+              </h1>
+              <div className="flex items-center gap-1">
+                <p className="text-[10px] text-cyan-200/70 truncate">
+                  {viewingAsUser ? viewingAsUser.email : user?.email}
+                </p>
+                {isAdmin && (
+                  <Shield className="w-3 h-3 text-amber-500" />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide">
+          {/* Main Sections */}
+          <div className="space-y-1">
+            <p className="px-4 text-xs font-bold text-slate-500 uppercase mb-2">
+              Principal
+            </p>
+            <SidebarItem
+              icon={<Users className="w-5 h-5" />}
+              label="Clientes"
+              active={activeSection === "clients"}
+              onClick={() => {
+                setActiveSection("clients");
+                setIsOpen(false);
+              }}
+            />
+            <SidebarItem
+              icon={<LayoutDashboard className="w-5 h-5" />}
+              label="Dashboard"
+              active={activeSection === "dashboard"}
+              onClick={() => {
+                setActiveSection("dashboard");
+                setIsOpen(false);
+              }}
+            />
+            <SidebarItem
+              icon={<Bell className="w-5 h-5" />}
+              label="Notificaciones"
+              badge={activeNotificationsCount}
+              onClick={() => {
+                setShowNotifications(true);
+                setIsOpen(false);
+              }}
+            />
+          </div>
+
+          {/* Tools */}
+          <div className="space-y-1">
+            <p className="px-4 text-xs font-bold text-slate-500 uppercase mb-2">
+              Herramientas
+            </p>
+            {!viewingAsUser && (
+              <>
+                <SidebarItem
+                  icon={<FileDown className="w-5 h-5" />}
+                  label="Descargar Plantilla"
+                  onClick={handleDownloadTemplate}
+                />
+                <SidebarItem
+                  icon={<FileSpreadsheet className="w-5 h-5" />}
+                  label="Importar CSV"
+                  onClick={triggerFileUpload}
+                />
+                <SidebarItem
+                  icon={<Download className="w-5 h-5" />}
+                  label="Exportar CSV"
+                  onClick={handleExportCSV}
+                />
+              </>
+            )}
+          </div>
+
+          {/* Settings & Admin */}
+          <div className="space-y-1">
+            <p className="px-4 text-xs font-bold text-slate-500 uppercase mb-2">
+              Sistema
+            </p>
+            {!viewingAsUser && (
+              <>
+                <SidebarItem
+                  icon={<Settings className="w-5 h-5" />}
+                  label="Configuración"
+                  onClick={() => {
+                    setShowSettings(true);
+                    setIsOpen(false);
+                  }}
+                />
+                <SidebarItem
+                  icon={<Trash2 className="w-5 h-5" />}
+                  label="Borrar Todo"
+                  onClick={handleDeleteAll}
+                  colorClass="hover:bg-rose-900/20 hover:text-rose-400"
+                />
+              </>
+            )}
+            {isAdmin && !viewingAsUser && (
+              <SidebarItem
+                icon={<Shield className="w-5 h-5" />}
+                label="Panel Admin"
+                onClick={() => {
+                  setShowAdminPanel(true);
+                  setIsOpen(false);
+                }}
+                colorClass="text-amber-500 hover:text-amber-400 hover:bg-amber-900/20"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-800">
+          <SidebarItem
+            icon={<LogOut className="w-5 h-5" />}
+            label="Cerrar Sesión"
+            onClick={handleLogout}
+            colorClass="hover:bg-rose-900/20 hover:text-rose-400"
+          />
+        </div>
+      </div>
+    </>
+  );
+};
+
 // --- COMPONENTE PRINCIPAL ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("dashboard");
 
   // Admin States
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1530,7 +1874,7 @@ export default function App() {
   if (!user) return <LoginScreen />;
 
   return (
-    <div className="min-h-screen bg-slate-900 font-sans text-gray-100 pb-20 transition-colors duration-300">
+    <div className="flex h-screen bg-[#020617] font-sans text-gray-100 overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-[#020617] to-black selection:bg-cyan-500/30 selection:text-cyan-200">
       <GlobalStyles />
       <input
         type="file"
@@ -1540,577 +1884,550 @@ export default function App() {
         style={{ display: "none" }}
       />
 
-      {/* Navbar RESPONSIVE */}
-      <div className="bg-slate-800/90 border-b border-slate-700 p-3 md:p-4 sticky top-0 z-20 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-900/20 shrink-0">
-              <Monitor className="w-5 h-5 md:w-6 md:h-6 text-white" />
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg md:text-xl font-bold tracking-tight text-white whitespace-nowrap">
+      <Sidebar
+        isOpen={isSidebarOpen}
+        setIsOpen={setIsSidebarOpen}
+        activeSection={activeSection}
+        setActiveSection={setActiveSection}
+        user={user}
+        isAdmin={isAdmin}
+        viewingAsUser={viewingAsUser}
+        setViewingAsUser={setViewingAsUser}
+        setShowAdminPanel={setShowAdminPanel}
+        setShowSettings={setShowSettings}
+        setShowNotifications={setShowNotifications}
+        activeNotificationsCount={activeNotificationsCount}
+        handleDownloadTemplate={handleDownloadTemplate}
+        triggerFileUpload={triggerFileUpload}
+        handleExportCSV={handleExportCSV}
+        handleDeleteAll={handleDeleteAll}
+        handleLogout={handleLogout}
+      />
+
+      {/* Main Content Wrapper */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto relative bg-transparent">
+        {/* Navbar RESPONSIVE */}
+        <div className="bg-[#0f172a]/70 border-b border-cyan-500/10 p-3 md:p-4 sticky top-0 z-20 backdrop-blur-xl shadow-[0_4px_20px_-4px_rgba(8,145,178,0.1)]">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="md:hidden p-2 -ml-2 text-slate-400 hover:text-white"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+
+              {/* Logo - Visible on Mobile, Hidden on Desktop */}
+              <div className="flex items-center gap-3 md:hidden">
+                <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-900/20 shrink-0">
+                  <Monitor className="w-5 h-5 text-white" />
+                </div>
+                <h1 className="text-lg font-bold tracking-tight text-white whitespace-nowrap">
                   NexusCRM
                 </h1>
-                {isAdmin ? (
-                  <span className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 shrink-0">
-                    <Shield className="w-3 h-3" />{" "}
-                    <span className="hidden sm:inline">Admin</span>
-                  </span>
-                ) : (
-                  <span className="bg-blue-900/40 text-blue-300 text-[10px] px-1.5 py-0.5 rounded border border-blue-700/30 flex items-center gap-1 shrink-0">
-                    <Lock className="w-3 h-3" />{" "}
-                    <span className="hidden sm:inline">Privado</span>
-                  </span>
-                )}
               </div>
-              <p className="text-xs text-slate-400 truncate flex items-center gap-1">
-                <User className="w-3 h-3" />{" "}
-                {viewingAsUser ? `Viendo: ${viewingAsUser.email}` : user.email}
-              </p>
-            </div>
 
-            {/* Mobile Logout Button (Visible only on very small screens if needed, otherwise part of toolbar) */}
-            <div className="md:hidden">
-              <NavButton
-                onClick={handleLogout}
-                icon={<LogOut className="w-4 h-4 text-rose-400" />}
-                label="Salir"
-                colorClass="bg-slate-800 border-slate-700"
-              />
-            </div>
-          </div>
+              {/* Centered Page Title for Desktop */}
+              <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center gap-2">
+                <h1 className="text-xl font-bold text-white tracking-tight capitalize">
+                  {activeSection === 'dashboard' ? 'Dashboard' : 'Clientes'}
+                </h1>
+              </div>
 
-          {/* Top Right Controls - Scrolable on mobile */}
-          <div className="w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
-            <div className="flex items-center gap-2 min-w-max">
-              {isAdmin && !viewingAsUser && (
+              <div className="flex-1 overflow-hidden hidden md:block">
+                <div className="flex items-center gap-2">
+                  {/* Desktop Title/Context */}
+                  {isAdmin ? (
+                    <span className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 shrink-0">
+                      <Shield className="w-3 h-3" />{" "}
+                      <span className="hidden sm:inline">Admin</span>
+                    </span>
+                  ) : (
+                    <span className="bg-blue-900/40 text-blue-300 text-[10px] px-1.5 py-0.5 rounded border border-blue-700/30 flex items-center gap-1 shrink-0">
+                      <Lock className="w-3 h-3" />{" "}
+                      <span className="hidden sm:inline">Privado</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 truncate flex items-center gap-1">
+                  <User className="w-3 h-3" />{" "}
+                  {viewingAsUser ? `Viendo: ${viewingAsUser.email}` : user.email}
+                </p>
+              </div>
+
+              {/* Mobile Logout Button (Visible only on very small screens if needed, otherwise part of toolbar) */}
+              <div className="md:hidden">
                 <NavButton
-                  onClick={() => setShowAdminPanel(true)}
-                  icon={<Shield className="w-5 h-5 text-amber-500" />}
-                  label="Admin Panel"
-                  colorClass="bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20"
+                  onClick={handleLogout}
+                  icon={<LogOut className="w-4 h-4 text-rose-400" />}
+                  label="Salir"
+                  colorClass="bg-slate-800 border-slate-700"
                 />
-              )}
-              {viewingAsUser && (
-                <button
-                  onClick={() => setViewingAsUser(null)}
-                  className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs md:text-sm font-bold shadow-md whitespace-nowrap"
-                >
-                  <LogOut className="w-4 h-4" /> Salir de {viewingAsUser.email}
-                </button>
-              )}
+              </div>
+            </div>
 
-              <NavButton
-                onClick={() => setShowNotifications(true)}
-                icon={<Bell className="w-5 h-5 text-white" />}
-                label="Notificaciones"
-                colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-                badge={activeNotificationsCount}
-              />
+            {/* Top Right Controls - Scrolable on mobile */}
+            <div className="w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+              <div className="flex items-center gap-2 min-w-max">
+                {isAdmin && !viewingAsUser && (
+                  <NavButton
+                    onClick={() => setShowAdminPanel(true)}
+                    icon={<Shield className="w-5 h-5 text-amber-500" />}
+                    label="Admin Panel"
+                    colorClass="bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20"
+                  />
+                )}
+                {viewingAsUser && (
+                  <button
+                    onClick={() => setViewingAsUser(null)}
+                    className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs md:text-sm font-bold shadow-md whitespace-nowrap"
+                  >
+                    <LogOut className="w-4 h-4" /> Salir de {viewingAsUser.email}
+                  </button>
+                )}
 
-              <div className="w-px h-6 bg-slate-700 mx-1 hidden sm:block"></div>
+                <NavButton
+                  onClick={() => setShowNotifications(true)}
+                  icon={<Bell className="w-5 h-5 text-white" />}
+                  label="Notificaciones"
+                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                  badge={activeNotificationsCount}
+                />
 
-              {!viewingAsUser && (
-                <>
-                  <TextNavButton
-                    onClick={handleDownloadTemplate}
-                    icon={<FileDown className="w-4 h-4 text-emerald-400" />}
-                    label="Plantilla"
-                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
-                  />
-                  <TextNavButton
-                    onClick={triggerFileUpload}
-                    icon={
-                      <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
-                    }
-                    label="Importar"
-                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
-                  />
-                  <TextNavButton
-                    onClick={handleExportCSV}
-                    icon={<Download className="w-4 h-4 text-blue-400" />}
-                    label="Exportar"
-                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
-                  />
-                  <TextNavButton
-                    onClick={handleDeleteAll}
-                    icon={<Trash2 className="w-4 h-4 text-rose-400" />}
-                    label="Borrar"
-                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
-                  />
+                {!viewingAsUser && (
                   <NavButton
                     onClick={() => setShowSettings(true)}
                     icon={<Settings className="w-5 h-5 text-slate-400" />}
                     label="Configuración"
                     colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
                   />
-                </>
-              )}
+                )}
 
-              <div className="hidden md:block">
-                <NavButton
-                  onClick={handleLogout}
-                  icon={<LogOut className="w-5 h-5 text-rose-400" />}
-                  label="Cerrar Sesión"
-                  colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-3 md:p-6 space-y-4 md:space-y-6">
-        {/* Stats Grid - Responsive Grid */}
-        {/* Stats Grid - Responsive Grid */}
-        <AnalyticsDashboard clients={clients} />
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
-          <StatsCard
-            title="Total Clientes"
-            value={stats.total}
-            icon={<Users className="w-4 h-4 md:w-5 md:h-5 text-blue-400" />}
-            color="border-blue-500"
-            active={filterStatus === "all"}
-            onClick={() => setFilterStatus("all")}
-          />
-          <StatsCard
-            title="Activos"
-            value={stats.active}
-            icon={
-              <CheckCircle className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
-            }
-            color="border-emerald-500"
-            active={filterStatus === "active"}
-            onClick={() => setFilterStatus("active")}
-          />
-          <StatsCard
-            title="Por Vencer"
-            value={stats.expiringSoon}
-            icon={
-              <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-yellow-400" />
-            }
-            color="border-yellow-500"
-            active={filterStatus === "expiring"}
-            onClick={() => setFilterStatus("expiring")}
-          />
-          <StatsCard
-            title="Vencidos"
-            value={stats.expired}
-            icon={<LogOut className="w-4 h-4 md:w-5 md:h-5 text-rose-400" />}
-            color="border-rose-500"
-            active={filterStatus === "expired"}
-            onClick={() => setFilterStatus("expired")}
-          />
-        </div>
-
-        <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700/50 md:overflow-hidden">
-          {/* Controls Bar */}
-          <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 md:gap-4 sticky top-[73px] md:top-0 z-10 shadow-md md:shadow-none">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar cliente..."
-                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 focus:border-blue-500 text-slate-200 text-sm outline-none transition-all focus:ring-1 focus:ring-blue-500"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-
-              {!viewingAsUser && (
-                <button
-                  onClick={() => openModal()}
-                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-blue-900/20 transition-all active:scale-95 whitespace-nowrap"
-                >
-                  <Plus className="w-4 h-4" />{" "}
-                  <span className="sm:hidden md:inline">Agregar</span>{" "}
-                  <span className="hidden sm:inline md:hidden">Agregar</span>{" "}
-                  <span className="hidden lg:inline">Cliente</span>
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 md:gap-4 justify-between">
-              <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs md:text-sm">
-                <Filter className="w-4 h-4" />{" "}
-                <span className="hidden sm:inline">Ordenar:</span>
-              </div>
-              <div className="relative flex-1 sm:flex-none">
-                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                  <ArrowUpDown className="w-3 h-3" />
+                <div className="hidden md:block">
+                  <NavButton
+                    onClick={handleLogout}
+                    icon={<LogOut className="w-5 h-5 text-rose-400" />}
+                    label="Cerrar Sesión"
+                    colorClass="bg-slate-800 hover:bg-slate-700 border-slate-700"
+                  />
                 </div>
-                <select
-                  value={sortOption}
-                  onChange={(e) => setSortOption(e.target.value)}
-                  className="w-full sm:w-auto pl-8 pr-4 py-1.5 rounded-lg bg-slate-900 border border-slate-600 text-slate-200 text-xs font-medium focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-700 transition-colors"
-                >
-                  <option value="expiryDate">Expiración</option>
-                  <option value="name">Nombre</option>
-                  <option value="platform">Plataforma</option>
-                </select>
               </div>
-              <span className="text-xs font-medium text-slate-400 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 whitespace-nowrap">
-                {loading ? "..." : `${filteredClients.length} regs`}
-              </span>
             </div>
           </div>
+        </div>
 
-          {/* VISTA MÓVIL: Lista de Tarjetas (Visible solo en móvil) */}
-          <div className="block md:hidden p-3 space-y-3">
-            {filteredClients.length === 0 && !loading && (
-              <div className="text-center py-8 text-slate-500">
-                No se encontraron clientes.
-              </div>
-            )}
-            {filteredClients.map((client) => (
-              <MobileClientCard
-                key={client.id}
-                client={client}
-                platforms={userPlatforms}
-                onWhatsApp={openWhatsApp}
-                onDetails={openDetailsModal}
-                onRenew={handleOpenRenewalModal}
-                onDelete={handleDelete}
-                isViewOnly={!!viewingAsUser}
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto p-3 md:p-6 space-y-4 md:space-y-6">
+          {activeSection === "dashboard" && (
+            <div className="animate-in fade-in duration-500">
+              <AnalyticsDashboard clients={clients} />
+            </div>
+          )}
+
+          {activeSection === "clients" && (
+            <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
+              <AttentionSection
+                clients={clients}
+                openWhatsApp={openWhatsApp}
+                toggleCompleteTask={toggleCompleteTask}
+                completedTasks={completedTasks}
               />
-            ))}
-          </div>
-
-          {/* VISTA ESCRITORIO: Tabla (Oculta en móvil) */}
-          <div className="hidden md:block overflow-x-auto scrollbar-hide">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-900/50 text-slate-400 font-medium uppercase text-xs tracking-wider">
-                <tr>
-                  <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3">Plataforma</th>
-                  <th className="px-4 py-3">ID</th>
-                  <th className="px-4 py-3">Usuario</th>
-                  <th className="px-4 py-3">Nombre</th>
-                  <th className="px-4 py-3">Pago</th>
-                  <th className="px-4 py-3">Expiración</th>
-                  <th className="px-4 py-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700">
-                {filteredClients.map((client) => {
-                  const daysRemaining = getDaysRemaining(client.expiryDate);
-                  const isExpired = daysRemaining < 0;
-                  const isExpiringSoon =
-                    daysRemaining >= 0 && daysRemaining <= 5;
-                  const platformObj = userPlatforms.find(
-                    (p) => p.id === client.platform
-                  );
-                  const platformColor = platformObj?.color || "bg-slate-600";
-                  const platformName = platformObj?.name || client.platform;
-                  const platformUrl = platformObj?.url;
-
-                  return (
-                    <tr
-                      key={client.id}
-                      className="hover:bg-slate-700/40 transition-colors group"
-                    >
-                      <td className="px-4 py-3 align-middle">
-                        <div className="flex justify-center items-center">
-                          {isExpired ? (
-                            <div className="w-3 h-3 rounded-full bg-rose-500 shadow-rose"></div>
-                          ) : isExpiringSoon ? (
-                            <div className="flex items-center gap-1">
-                              <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                              <AlertCircle className="w-4 h-4 text-yellow-400 animate-pulse" />
-                            </div>
-                          ) : (
-                            <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-emerald"></div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        {platformUrl ? (
-                          <a
-                            href={platformUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`${platformColor} text-white px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase shadow-sm hover:opacity-80 transition-opacity flex items-center gap-1 w-fit`}
-                          >
-                            {platformName} <Tv className="w-3 h-3" />
-                          </a>
-                        ) : (
-                          <span
-                            className={`${platformColor} text-white px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase shadow-sm`}
-                          >
-                            {platformName}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        <span className="font-mono text-slate-300 text-xs">
-                          {client.customId || "-"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        <div className="text-slate-200 text-xs font-medium">
-                          {client.username}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        <div className="font-semibold text-white text-sm">
-                          {client.name}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        {client.lastPaymentAmount > 0 ? (
-                          <span className="text-emerald-400 font-bold text-xs bg-emerald-900/20 px-2 py-1 rounded border border-emerald-900/30">
-                            ${client.lastPaymentAmount}
-                          </span>
-                        ) : (
-                          <span className="text-slate-600 text-xs">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        <span
-                          className={`font-bold text-xs ${isExpired
-                            ? "text-rose-400"
-                            : isExpiringSoon
-                              ? "text-yellow-400"
-                              : "text-slate-300"
-                            }`}
-                        >
-                          {formatDate(client.expiryDate)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 align-middle text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <NavButton
-                            onClick={() => openWhatsApp(client)}
-                            icon={<MessageCircle className="w-4 h-4" />}
-                            label="WhatsApp"
-                            colorClass="text-emerald-400 bg-emerald-900/20 hover:bg-emerald-900/40 border-emerald-900/30"
-                          />
-                          <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                          <NavButton
-                            onClick={() => openDetailsModal(client)}
-                            icon={<Eye className="w-4 h-4" />}
-                            label="Ver Detalles"
-                            colorClass="text-blue-400 bg-blue-900/20 hover:bg-blue-900/40 border-blue-900/30"
-                          />
-                          <NavButton
-                            onClick={() => handleOpenRenewalModal(client)}
-                            icon={<RefreshCw className="w-4 h-4" />}
-                            label="Renovar"
-                            colorClass="text-purple-400 bg-purple-900/20 hover:bg-purple-900/40 border-purple-900/30"
-                          />
-
-                          {!viewingAsUser && (
-                            <NavButton
-                              onClick={() => handleDelete(client.id)}
-                              icon={<Trash2 className="w-4 h-4" />}
-                              label="Eliminar"
-                              colorClass="text-rose-400 hover:text-rose-300 bg-transparent border-transparent hover:bg-rose-900/20"
-                            />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      {/* --- MODAL ADMIN --- */}
-      {showAdminPanel && isAdmin && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-700 overflow-hidden h-[80vh] flex flex-col">
-            <div className="p-5 border-b border-slate-800 flex justify-between items-center">
-              <h3 className="font-bold text-white flex items-center gap-2">
-                <Shield className="w-5 h-5 text-amber-500" /> Panel de
-                Administración
-              </h3>
-              <button onClick={() => setShowAdminPanel(false)}>
-                <X className="w-5 h-5 text-slate-500 hover:text-white" />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {allUsers.map((u) => (
-                  <div
-                    key={u.id}
-                    className="bg-slate-800 p-4 rounded-xl border border-slate-700 hover:border-blue-500 cursor-pointer transition-all"
-                    onClick={() => {
-                      setViewingAsUser(u);
-                      setShowAdminPanel(false);
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="bg-blue-900/30 p-2 rounded-lg text-blue-400">
-                        <User className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <p className="text-white font-bold text-sm">
-                          {u.email}
-                        </p>
-                        <p className="text-slate-500 text-xs">
-                          ID: {u.id.slice(0, 8)}...
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
+                <StatsCard
+                  title="Total Clientes"
+                  value={stats.total}
+                  icon={<Users className="w-4 h-4 md:w-5 md:h-5 text-blue-400" />}
+                  color="border-blue-500"
+                  active={filterStatus === "all"}
+                  onClick={() => setFilterStatus("all")}
+                />
+                <StatsCard
+                  title="Activos"
+                  value={stats.active}
+                  icon={
+                    <CheckCircle className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
+                  }
+                  color="border-emerald-500"
+                  active={filterStatus === "active"}
+                  onClick={() => setFilterStatus("active")}
+                />
+                <StatsCard
+                  title="Por Vencer"
+                  value={stats.expiringSoon}
+                  icon={
+                    <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-yellow-400" />
+                  }
+                  color="border-yellow-500"
+                  active={filterStatus === "expiring"}
+                  onClick={() => setFilterStatus("expiring")}
+                />
+                <StatsCard
+                  title="Vencidos"
+                  value={stats.expired}
+                  icon={<LogOut className="w-4 h-4 md:w-5 md:h-5 text-rose-400" />}
+                  color="border-rose-500"
+                  active={filterStatus === "expired"}
+                  onClick={() => setFilterStatus("expired")}
+                />
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Settings */}
-      {showSettings && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200 max-h-[90vh] flex flex-col">
-            <div className="p-4 md:p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
-              <div className="flex items-center gap-3">
-                <div className="bg-slate-700 p-2 rounded-lg text-slate-300">
-                  <Settings className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-white">Configuración</h3>
-                  <p className="text-xs text-slate-400">
-                    Personaliza plataformas y mensajes
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="text-slate-500 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex border-b border-slate-800">
-              <button
-                onClick={() => setSettingsTab("platforms")}
-                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${settingsTab === "platforms"
-                  ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
-                  : "text-slate-400 hover:text-slate-200"
-                  }`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <Tv className="w-4 h-4" />{" "}
-                  <span className="hidden sm:inline">Plataformas</span>
-                </div>
-              </button>
-              <button
-                onClick={() => setSettingsTab("messages")}
-                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${settingsTab === "messages"
-                  ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
-                  : "text-slate-400 hover:text-slate-200"
-                  }`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <MessageSquare className="w-4 h-4" />{" "}
-                  <span className="hidden sm:inline">Mensajes</span>
-                </div>
-              </button>
-              <button
-                onClick={() => setSettingsTab("notifications")}
-                className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${settingsTab === "notifications"
-                  ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
-                  : "text-slate-400 hover:text-slate-200"
-                  }`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <Bell className="w-4 h-4" />{" "}
-                  <span className="hidden sm:inline">Notificaciones</span>
-                </div>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-              {settingsTab === "platforms" ? (
-                <div className="space-y-6">
-                  <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                    <label className="block text-xs font-bold text-slate-400 mb-3 uppercase">
-                      Agregar Nueva
-                    </label>
-                    <div className="space-y-2">
+              <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700/50 md:overflow-hidden">
+                {/* Controls Bar */}
+                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 md:gap-4 sticky top-[73px] md:top-0 z-10 shadow-md md:shadow-none">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                       <input
                         type="text"
-                        placeholder="Nombre"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-blue-500 outline-none uppercase"
-                        value={newPlatformName}
-                        onChange={(e) => setNewPlatformName(e.target.value)}
+                        placeholder="Buscar cliente..."
+                        className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 focus:border-blue-500 text-slate-200 text-sm outline-none transition-all focus:ring-1 focus:ring-blue-500"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
                       />
-                      <input
-                        type="text"
-                        placeholder="URL (http...)"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-blue-500 outline-none"
-                        value={newPlatformUrl}
-                        onChange={(e) => setNewPlatformUrl(e.target.value)}
-                      />
-                      <div className="flex gap-2">
-                        <select
-                          className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-blue-500"
-                          value={newPlatformColor}
-                          onChange={(e) => setNewPlatformColor(e.target.value)}
-                        >
-                          {AVAILABLE_COLORS.map((c) => (
-                            <option key={c.class} value={c.class}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={handleAddPlatform}
-                          className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-lg flex items-center justify-center min-w-[48px]"
-                        >
-                          <Plus className="w-5 h-5" />
-                        </button>
-                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    {userPlatforms.map((plat) => (
-                      <div
-                        key={plat.id}
-                        className="flex items-center justify-between bg-slate-800 p-3 rounded-lg border border-slate-700 group hover:border-slate-600"
+
+                    {!viewingAsUser && (
+                      <button
+                        onClick={() => openModal()}
+                        className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-blue-900/20 transition-all active:scale-95 whitespace-nowrap"
                       >
-                        {editingPlatform?.id === plat.id ? (
-                          <div className="flex gap-2 w-full items-center">
-                            <input
-                              type="text"
-                              className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs uppercase"
-                              value={editingPlatform.name}
-                              onChange={(e) =>
-                                setEditingPlatform({
-                                  ...editingPlatform,
-                                  name: e.target.value,
-                                })
-                              }
-                            />
-                            <input
-                              type="text"
-                              placeholder="URL"
-                              className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs"
-                              value={editingPlatform.url || ""}
-                              onChange={(e) =>
-                                setEditingPlatform({
-                                  ...editingPlatform,
-                                  url: e.target.value,
-                                })
-                              }
-                            />
+                        <Plus className="w-4 h-4" />{" "}
+                        <span className="sm:hidden md:inline">Agregar</span>{" "}
+                        <span className="hidden sm:inline md:hidden">Agregar</span>{" "}
+                        <span className="hidden lg:inline">Cliente</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 md:gap-4 justify-between">
+                    <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs md:text-sm">
+                      <Filter className="w-4 h-4" />{" "}
+                      <span className="hidden sm:inline">Ordenar:</span>
+                    </div>
+                    <div className="relative flex-1 sm:flex-none">
+                      <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <ArrowUpDown className="w-3 h-3" />
+                      </div>
+                      <select
+                        value={sortOption}
+                        onChange={(e) => setSortOption(e.target.value)}
+                        className="w-full sm:w-auto pl-8 pr-4 py-1.5 rounded-lg bg-slate-900 border border-slate-600 text-slate-200 text-xs font-medium focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-700 transition-colors"
+                      >
+                        <option value="expiryDate">Expiración</option>
+                        <option value="name">Nombre</option>
+                        <option value="platform">Plataforma</option>
+                      </select>
+                    </div>
+                    <span className="text-xs font-medium text-slate-400 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 whitespace-nowrap">
+                      {loading ? "..." : `${filteredClients.length} regs`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* VISTA MÓVIL: Lista de Tarjetas (Visible solo en móvil) */}
+                <div className="block md:hidden p-3 space-y-3">
+                  {filteredClients.length === 0 && !loading && (
+                    <div className="text-center py-8 text-slate-500">
+                      No se encontraron clientes.
+                    </div>
+                  )}
+                  {filteredClients.map((client) => (
+                    <MobileClientCard
+                      key={client.id}
+                      client={client}
+                      platforms={userPlatforms}
+                      onWhatsApp={openWhatsApp}
+                      onDetails={openDetailsModal}
+                      onRenew={handleOpenRenewalModal}
+                      onDelete={handleDelete}
+                      isViewOnly={!!viewingAsUser}
+                    />
+                  ))}
+                </div>
+
+                {/* VISTA ESCRITORIO: Tabla (Oculta en móvil) */}
+                <div className="hidden md:block overflow-x-auto scrollbar-hide">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-900/50 text-slate-400 font-medium uppercase text-xs tracking-wider">
+                      <tr>
+                        <th className="px-4 py-3 text-center">Status</th>
+                        <th className="px-4 py-3">Plataforma</th>
+                        <th className="px-4 py-3">ID</th>
+                        <th className="px-4 py-3">Usuario</th>
+                        <th className="px-4 py-3">Nombre</th>
+                        <th className="px-4 py-3">Pago</th>
+                        <th className="px-4 py-3">Expiración</th>
+                        <th className="px-4 py-3 text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700">
+                      {filteredClients.map((client) => {
+                        const daysRemaining = getDaysRemaining(client.expiryDate);
+                        const isExpired = daysRemaining < 0;
+                        const isExpiringSoon =
+                          daysRemaining >= 0 && daysRemaining <= 5;
+                        const platformObj = userPlatforms.find(
+                          (p) => p.id === client.platform
+                        );
+                        const platformColor = platformObj?.color || "bg-slate-600";
+                        const platformName = platformObj?.name || client.platform;
+                        const platformUrl = platformObj?.url;
+
+                        return (
+                          <tr
+                            key={client.id}
+                            className="hover:bg-slate-700/40 transition-colors group"
+                          >
+                            <td className="px-4 py-3 align-middle">
+                              <div className="flex justify-center items-center">
+                                {isExpired ? (
+                                  <div className="w-3 h-3 rounded-full bg-rose-500 shadow-rose"></div>
+                                ) : isExpiringSoon ? (
+                                  <div className="flex items-center gap-1">
+                                    <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                                    <AlertCircle className="w-4 h-4 text-yellow-400 animate-pulse" />
+                                  </div>
+                                ) : (
+                                  <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-emerald"></div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 align-middle">
+                              {platformUrl ? (
+                                <a
+                                  href={platformUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`${platformColor} text-white px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase shadow-sm hover:opacity-80 transition-opacity flex items-center gap-1 w-fit`}
+                                >
+                                  {platformName} <Tv className="w-3 h-3" />
+                                </a>
+                              ) : (
+                                <span
+                                  className={`${platformColor} text-white px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase shadow-sm`}
+                                >
+                                  {platformName}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 align-middle">
+                              <span className="font-mono text-slate-300 text-xs">
+                                {client.customId || "-"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 align-middle">
+                              <div className="text-slate-200 text-xs font-medium">
+                                {client.username}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 align-middle">
+                              <div className="font-semibold text-white text-sm">
+                                {client.name}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 align-middle">
+                              {client.lastPaymentAmount > 0 ? (
+                                <span className="text-emerald-400 font-bold text-xs bg-emerald-900/20 px-2 py-1 rounded border border-emerald-900/30">
+                                  ${client.lastPaymentAmount}
+                                </span>
+                              ) : (
+                                <span className="text-slate-600 text-xs">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 align-middle">
+                              <span
+                                className={`font-bold text-xs ${isExpired
+                                  ? "text-rose-400"
+                                  : isExpiringSoon
+                                    ? "text-yellow-400"
+                                    : "text-slate-300"
+                                  }`}
+                              >
+                                {formatDate(client.expiryDate)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 align-middle text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <NavButton
+                                  onClick={() => openWhatsApp(client)}
+                                  icon={<MessageCircle className="w-4 h-4" />}
+                                  label="WhatsApp"
+                                  colorClass="text-emerald-400 bg-emerald-900/20 hover:bg-emerald-900/40 border-emerald-900/30"
+                                />
+                                <div className="w-px h-4 bg-slate-700 mx-1"></div>
+                                <NavButton
+                                  onClick={() => openDetailsModal(client)}
+                                  icon={<Eye className="w-4 h-4" />}
+                                  label="Ver Detalles"
+                                  colorClass="text-blue-400 bg-blue-900/20 hover:bg-blue-900/40 border-blue-900/30"
+                                />
+                                <NavButton
+                                  onClick={() => handleOpenRenewalModal(client)}
+                                  icon={<RefreshCw className="w-4 h-4" />}
+                                  label="Renovar"
+                                  colorClass="text-purple-400 bg-purple-900/20 hover:bg-purple-900/40 border-purple-900/30"
+                                />
+
+                                {!viewingAsUser && (
+                                  <NavButton
+                                    onClick={() => handleDelete(client.id)}
+                                    icon={<Trash2 className="w-4 h-4" />}
+                                    label="Eliminar"
+                                    colorClass="text-rose-400 hover:text-rose-300 bg-transparent border-transparent hover:bg-rose-900/20"
+                                  />
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )
+          }
+        </div >
+
+        {/* --- MODAL ADMIN --- */}
+        {
+          showAdminPanel && isAdmin && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-700 overflow-hidden h-[80vh] flex flex-col">
+                <div className="p-5 border-b border-slate-800 flex justify-between items-center">
+                  <h3 className="font-bold text-white flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-amber-500" /> Panel de
+                    Administración
+                  </h3>
+                  <button onClick={() => setShowAdminPanel(false)}>
+                    <X className="w-5 h-5 text-slate-500 hover:text-white" />
+                  </button>
+                </div>
+                <div className="p-6 overflow-y-auto">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {allUsers.map((u) => (
+                      <div
+                        key={u.id}
+                        className="bg-slate-800 p-4 rounded-xl border border-slate-700 hover:border-blue-500 cursor-pointer transition-all"
+                        onClick={() => {
+                          setViewingAsUser(u);
+                          setShowAdminPanel(false);
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="bg-blue-900/30 p-2 rounded-lg text-blue-400">
+                            <User className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-white font-bold text-sm">
+                              {u.email}
+                            </p>
+                            <p className="text-slate-500 text-xs">
+                              ID: {u.id.slice(0, 8)}...
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        }
+
+        {/* Settings */}
+        {
+          showSettings && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-200 max-h-[90vh] flex flex-col">
+                <div className="p-4 md:p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-slate-700 p-2 rounded-lg text-slate-300">
+                      <Settings className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white">Configuración</h3>
+                      <p className="text-xs text-slate-400">
+                        Personaliza plataformas y mensajes
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowSettings(false)}
+                    className="text-slate-500 hover:text-white"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex border-b border-slate-800">
+                  <button
+                    onClick={() => setSettingsTab("platforms")}
+                    className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${settingsTab === "platforms"
+                      ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
+                      : "text-slate-400 hover:text-slate-200"
+                      }`}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <Tv className="w-4 h-4" />{" "}
+                      <span className="hidden sm:inline">Plataformas</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setSettingsTab("messages")}
+                    className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${settingsTab === "messages"
+                      ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
+                      : "text-slate-400 hover:text-slate-200"
+                      }`}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <MessageSquare className="w-4 h-4" />{" "}
+                      <span className="hidden sm:inline">Mensajes</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setSettingsTab("notifications")}
+                    className={`flex-1 py-3 text-xs md:text-sm font-medium text-center transition-colors ${settingsTab === "notifications"
+                      ? "text-blue-400 border-b-2 border-blue-500 bg-slate-800/50"
+                      : "text-slate-400 hover:text-slate-200"
+                      }`}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <Bell className="w-4 h-4" />{" "}
+                      <span className="hidden sm:inline">Notificaciones</span>
+                    </div>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+                  {settingsTab === "platforms" ? (
+                    <div className="space-y-6">
+                      <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                        <label className="block text-xs font-bold text-slate-400 mb-3 uppercase">
+                          Agregar Nueva
+                        </label>
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            placeholder="Nombre"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-blue-500 outline-none uppercase"
+                            value={newPlatformName}
+                            onChange={(e) => setNewPlatformName(e.target.value)}
+                          />
+                          <input
+                            type="text"
+                            placeholder="URL (http...)"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-blue-500 outline-none"
+                            value={newPlatformUrl}
+                            onChange={(e) => setNewPlatformUrl(e.target.value)}
+                          />
+                          <div className="flex gap-2">
                             <select
-                              className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs"
-                              value={editingPlatform.color}
-                              onChange={(e) =>
-                                setEditingPlatform({
-                                  ...editingPlatform,
-                                  color: e.target.value,
-                                })
-                              }
+                              className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-blue-500"
+                              value={newPlatformColor}
+                              onChange={(e) => setNewPlatformColor(e.target.value)}
                             >
                               {AVAILABLE_COLORS.map((c) => (
                                 <option key={c.class} value={c.class}>
@@ -2119,822 +2436,888 @@ export default function App() {
                               ))}
                             </select>
                             <button
-                              onClick={saveEditedPlatform}
-                              className="text-emerald-400 p-1"
+                              onClick={handleAddPlatform}
+                              className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-lg flex items-center justify-center min-w-[48px]"
                             >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={cancelEditingPlatform}
-                              className="text-rose-400 p-1"
-                            >
-                              <X className="w-4 h-4" />
+                              <Plus className="w-5 h-5" />
                             </button>
                           </div>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={`w-4 h-4 rounded-full ${plat.color}`}
-                              ></div>
-                              <span className="font-bold text-white text-sm">
-                                {plat.name}
-                              </span>
-                            </div>
-                            <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => startEditingPlatform(plat)}
-                                className="text-slate-500 hover:text-blue-400 p-1"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeletePlatform(plat.id)}
-                                className="text-slate-500 hover:text-rose-400 p-1"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : settingsTab === "messages" ? (
-                <div className="space-y-5">
-                  {/* Messages settings content remains same */}
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                    <div className="mb-2">
-                      <label className="text-sm font-bold text-yellow-400">
-                        Vence Mañana (1 día)
-                      </label>
-                    </div>
-                    <VariableToolbar
-                      onInsert={(v) =>
-                        insertIntoTemplate("reminderTomorrow", v)
-                      }
-                    />
-                    <textarea
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-yellow-500 outline-none min-h-[80px]"
-                      value={userTemplates.reminderTomorrow}
-                      onChange={(e) =>
-                        handleUpdateTemplate("reminderTomorrow", e.target.value)
-                      }
-                    />
-                  </div>
-                  {/* ... other message blocks ... */}
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                    <div className="mb-2">
-                      <label className="text-sm font-bold text-blue-400 flex gap-2">
-                        <HelpCircle className="w-4 h-4" /> Seguimiento (Faltan
-                        15 días)
-                      </label>
-                    </div>
-                    <VariableToolbar
-                      onInsert={(v) => insertIntoTemplate("checkIn15Days", v)}
-                    />
-                    <textarea
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-blue-500 outline-none min-h-[80px]"
-                      value={userTemplates.checkIn15Days}
-                      onChange={(e) =>
-                        handleUpdateTemplate("checkIn15Days", e.target.value)
-                      }
-                    />
-                  </div>
-
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                    <div className="mb-2">
-                      <label className="text-sm font-bold text-purple-400 flex gap-2">
-                        <HeartHandshake className="w-4 h-4" /> Recuperación
-                        (Hace 15 días)
-                      </label>
-                    </div>
-                    <VariableToolbar
-                      onInsert={(v) => insertIntoTemplate("recoveryLost", v)}
-                    />
-                    <textarea
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-purple-500 outline-none min-h-[80px]"
-                      value={userTemplates.recoveryLost}
-                      onChange={(e) =>
-                        handleUpdateTemplate("recoveryLost", e.target.value)
-                      }
-                    />
-                  </div>
-
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-                    <div className="mb-2">
-                      <label className="text-sm font-bold text-rose-400">
-                        Vencido
-                      </label>
-                    </div>
-                    <VariableToolbar
-                      onInsert={(v) => insertIntoTemplate("expired", v)}
-                    />
-                    <textarea
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-rose-500 outline-none min-h-[80px]"
-                      value={userTemplates.expired}
-                      onChange={(e) =>
-                        handleUpdateTemplate("expired", e.target.value)
-                      }
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  {/* TAB NOTIFICACIONES */}
-                  {/* ... same notification content ... */}
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
-                    <div>
-                      <h4 className="text-white font-bold text-sm flex items-center gap-2">
-                        <HelpCircle className="w-4 h-4 text-blue-400" />{" "}
-                        Seguimiento Preventivo
-                      </h4>
-                      <p className="text-slate-400 text-xs mt-1">
-                        Avisar 15 días antes del vencimiento.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() =>
-                        toggleNotificationPreference("checkIn15Days")
-                      }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${userNotificationPrefs.checkIn15Days
-                        ? "bg-blue-600"
-                        : "bg-slate-700"
-                        }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${userNotificationPrefs.checkIn15Days
-                          ? "translate-x-6"
-                          : "translate-x-1"
-                          }`}
-                      />
-                    </button>
-                  </div>
-
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
-                    <div>
-                      <h4 className="text-white font-bold text-sm flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-yellow-400" />{" "}
-                        Alerta de Urgencia
-                      </h4>
-                      <p className="text-slate-400 text-xs mt-1">
-                        Avisar desde 1 día antes y mantener si vence.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() =>
-                        toggleNotificationPreference("reminderTomorrow")
-                      }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${userNotificationPrefs.reminderTomorrow
-                        ? "bg-blue-600"
-                        : "bg-slate-700"
-                        }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${userNotificationPrefs.reminderTomorrow
-                          ? "translate-x-6"
-                          : "translate-x-1"
-                          }`}
-                      />
-                    </button>
-                  </div>
-
-                  <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
-                    <div>
-                      <h4 className="text-white font-bold text-sm flex items-center gap-2">
-                        <HeartHandshake className="w-4 h-4 text-purple-400" />{" "}
-                        Recuperación
-                      </h4>
-                      <p className="text-slate-400 text-xs mt-1">
-                        Intentar recuperar al cliente 15 días después.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() =>
-                        toggleNotificationPreference("recovery15Days")
-                      }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${userNotificationPrefs.recovery15Days
-                        ? "bg-blue-600"
-                        : "bg-slate-700"
-                        }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${userNotificationPrefs.recovery15Days
-                          ? "translate-x-6"
-                          : "translate-x-1"
-                          }`}
-                      />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Renovación */}
-      {renewingClient && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 p-6">
-            <h3 className="text-white font-bold mb-4">
-              Renovar a {renewingClient.name}
-            </h3>
-            <input
-              type="date"
-              className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white mb-4 [color-scheme:dark]"
-              value={renewalData.newExpiryDate}
-              onChange={(e) =>
-                setRenewalData({
-                  ...renewalData,
-                  newExpiryDate: e.target.value,
-                })
-              }
-            />
-            <div className="mb-4">
-              <label className="block text-xs text-slate-400 mb-1 uppercase font-bold">
-                Monto Pagado ($)
-              </label>
-              <input
-                type="number"
-                className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white font-bold text-lg"
-                placeholder="0.00"
-                value={renewalData.paymentAmount}
-                onChange={(e) =>
-                  setRenewalData({
-                    ...renewalData,
-                    paymentAmount: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              <button
-                onClick={() => applyRenewalPreset(1)}
-                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700 text-sm"
-              >
-                +1 Mes
-              </button>
-              <button
-                onClick={() => applyRenewalPreset(3)}
-                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700 text-sm"
-              >
-                +3 Meses
-              </button>
-              <button
-                onClick={() => applyRenewalPreset(6)}
-                className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700 text-sm"
-              >
-                +6 Meses
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={confirmRenewal}
-                className="flex-1 bg-emerald-600 text-white p-3 rounded font-bold"
-              >
-                Confirmar
-              </button>
-              <button
-                onClick={() => setRenewingClient(null)}
-                className="flex-1 bg-slate-700 text-white p-3 rounded"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Detalles */}
-      {viewDetailsClient && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-700 overflow-hidden animate-in slide-in-from-bottom duration-200 h-[90vh] sm:h-auto sm:max-h-[90vh] flex flex-col">
-            {/* Header */}
-            <div className="p-4 md:p-6 border-b border-slate-800 bg-slate-900 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-3 md:gap-4">
-                <div
-                  className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg ${userPlatforms.find(
-                    (p) => p.id === viewDetailsClient.platform
-                  )?.color || "bg-slate-700"
-                    }`}
-                >
-                  <Monitor className="w-6 h-6 md:w-8 md:h-8 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-lg md:text-2xl font-bold text-white tracking-tight">
-                    {viewDetailsClient.name}
-                  </h2>
-                  <div className="flex items-center gap-2 text-slate-400 text-xs md:text-sm">
-                    <span className="uppercase font-bold tracking-wider">
-                      {viewDetailsClient.platform}
-                    </span>
-                    <span className="w-1 h-1 bg-slate-500 rounded-full"></span>
-                    <span className="font-mono">
-                      {viewDetailsClient.customId || "SIN ID"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={closeDetailsModal}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white p-2 rounded-xl transition-colors"
-              >
-                <X className="w-5 h-5 md:w-6 md:h-6" />
-              </button>
-            </div>
-
-            {/* Body Grid - Scrollable */}
-            <div className="p-4 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 overflow-y-auto">
-              {/* Columna 1: Accesos */}
-              <div className="space-y-3 md:space-y-4">
-                <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Lock className="w-4 h-4" /> Credenciales
-                </h3>
-                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
-                  <div>
-                    <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
-                      Usuario
-                    </label>
-                    <div className="flex items-center gap-2 text-white font-mono text-base md:text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50">
-                      <User className="w-4 h-4 text-slate-500" />
-                      <span className="truncate">
-                        {viewDetailsClient.username}
-                      </span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
-                      Contraseña
-                    </label>
-                    <div className="flex items-center gap-2 text-white font-mono text-base md:text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50 justify-between">
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <Lock className="w-4 h-4 text-slate-500" />
-                        <span className="truncate">
-                          {showClientPassword
-                            ? viewDetailsClient.password || "N/A"
-                            : "••••••••"}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() =>
-                          setShowClientPassword(!showClientPassword)
-                        }
-                        className="text-slate-400 hover:text-white p-1"
-                      >
-                        {showClientPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Columna 2: Fechas y Estado */}
-              <div className="space-y-3 md:space-y-4">
-                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Activity className="w-4 h-4" /> Estado del Servicio
-                </h3>
-                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
-                        Inicio
-                      </label>
-                      <p className="text-white font-medium">
-                        {formatDate(viewDetailsClient.startDate)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
-                        Renovaciones
-                      </label>
-                      <span className="inline-flex items-center justify-center bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs font-bold border border-blue-500/20">
-                        {viewDetailsClient.renewals}{" "}
-                        <RefreshCw className="w-3 h-3 ml-1" />
-                      </span>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t border-slate-700/50">
-                    <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
-                      Expiración
-                    </label>
-                    <p
-                      className={`text-xl md:text-2xl font-bold ${getDaysRemaining(viewDetailsClient.expiryDate) < 0
-                        ? "text-rose-500"
-                        : "text-emerald-400"
-                        }`}
-                    >
-                      {formatDate(viewDetailsClient.expiryDate)}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      {getDaysRemaining(viewDetailsClient.expiryDate) < 0
-                        ? "Servicio Vencido"
-                        : `${getDaysRemaining(
-                          viewDetailsClient.expiryDate
-                        )} días restantes`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Columna 3: Contacto y Conexión */}
-              <div className="space-y-3 md:space-y-4">
-                <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Phone className="w-4 h-4" /> Contacto y Uso
-                </h3>
-                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
-                  <div
-                    onClick={() => openWhatsApp(viewDetailsClient)}
-                    className="cursor-pointer group"
-                  >
-                    <label className="text-slate-500 text-xs font-bold uppercase block mb-1 group-hover:text-emerald-400 transition-colors">
-                      WhatsApp
-                    </label>
-                    <div className="flex items-center gap-2 text-white text-base md:text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50 group-hover:border-emerald-500/50 transition-colors">
-                      <MessageCircle className="w-5 h-5 text-emerald-500" />
-                      <span>{viewDetailsClient.contact || "Sin número"}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
-                      Dispositivos
-                    </label>
-                    <div className="flex items-center gap-2 text-white text-base md:text-lg">
-                      <Wifi className="w-5 h-5 text-blue-500" />
-                      <span>
-                        {viewDetailsClient.connections} Pantalla
-                        {viewDetailsClient.connections !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Actions - Sticky Bottom */}
-            <div className="p-4 md:p-6 bg-slate-900 border-t border-slate-800 flex gap-4 shrink-0">
-              <button
-                onClick={() => {
-                  closeDetailsModal();
-                  handleOpenRenewalModal(viewDetailsClient);
-                }}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm md:text-base"
-              >
-                <RefreshCw className="w-5 h-5" /> Renovar
-              </button>
-              <button
-                onClick={() => {
-                  closeDetailsModal();
-                  openModal(viewDetailsClient);
-                }}
-                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold border border-slate-700 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm md:text-base"
-              >
-                <Edit2 className="w-5 h-5" /> Editar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Notificaciones */}
-      {showNotifications && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden h-[80vh] flex flex-col">
-            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900 shrink-0 gap-3">
-              <div className="flex-1">
-                <h3 className="text-white font-bold flex items-center gap-2">
-                  <Bell className="w-5 h-5" /> Notificaciones
-                </h3>
-              </div>
-
-              {/* Nuevo Botón de Borrar Completados */}
-              {completedTasks.length > 0 && (
-                <button
-                  onClick={handleClearCompleted}
-                  className="text-xs bg-slate-800 hover:bg-rose-900/40 text-rose-400 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-rose-500/30 transition-all flex items-center gap-1.5"
-                >
-                  <Trash className="w-3.5 h-3.5" />
-                  Borrar ({completedTasks.length})
-                </button>
-              )}
-
-              <button onClick={() => setShowNotifications(false)}>
-                <X className="w-5 h-5 text-slate-500 hover:text-white" />
-              </button>
-            </div>
-
-            <div className="p-4 overflow-y-auto space-y-2 flex-1">
-              {pendingNotifications.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
-                  <CheckCircle className="w-12 h-12 opacity-20" />
-                  <p>¡Todo al día!</p>
-                  <p className="text-xs text-slate-600 text-center px-4">
-                    No tienes alertas pendientes. Las tareas completadas se han
-                    limpiado.
-                  </p>
-                </div>
-              )}
-              {pendingNotifications.map((c) => {
-                const days = getDaysRemaining(c.expiryDate);
-
-                // Determinar tipo de alerta dinámico
-                let type = "default"; // CORREGIDO: Default para que use la lógica automática de openWhatsApp
-                let label = "";
-                let style = "";
-                let Icon = AlertCircle;
-
-                if (days === 15) {
-                  type = "checkIn15Days";
-                  label = "Seguimiento";
-                  style = "bg-blue-500/10 text-blue-400 border-blue-500/20";
-                  Icon = HelpCircle;
-                } else if (days === -15) {
-                  type = "recoveryLost";
-                  label = "Recuperación";
-                  style =
-                    "bg-purple-500/10 text-purple-400 border-purple-500/20";
-                  Icon = HeartHandshake;
-                } else if (days === 1) {
-                  type = "reminderTomorrow"; // Solo explícito si falta 1 día
-                  label = "Vence Mañana";
-                  style =
-                    "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
-                  Icon = AlertCircle;
-                } else if (days === 0) {
-                  type = "default"; // Dejar que openWhatsApp detecte <= 5 días
-                  label = "Vence HOY";
-                  style =
-                    "bg-orange-500/10 text-orange-400 border-orange-500/20 animate-pulse";
-                  Icon = AlertCircle;
-                } else if (days < 0) {
-                  type = "default"; // Dejar que openWhatsApp detecte < 0 días (expired)
-                  label = "VENCIDO";
-                  style =
-                    "bg-rose-500/10 text-rose-400 border-rose-500/20 font-bold";
-                  Icon = AlertTriangle;
-                }
-
-                const isCompleted = completedTasks.includes(c.id);
-
-                return (
-                  <div
-                    key={c.id}
-                    className={`p-4 transition-all duration-300 rounded border border-slate-700 ${isCompleted
-                      ? "bg-slate-900/30 opacity-50 scale-[0.98]"
-                      : "bg-slate-800"
-                      }`}
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <p
-                          className={`font-bold text-sm ${isCompleted
-                            ? "text-slate-500 line-through"
-                            : "text-white"
-                            }`}
-                        >
-                          {c.name}
-                        </p>
-                        <p className="text-slate-400 text-xs mt-0.5">
-                          {c.platform} • {c.contact}
-                        </p>
-                      </div>
-                      <div
-                        className={`text-[10px] font-bold px-2 py-1 rounded uppercase border flex items-center gap-1.5 ${style}`}
-                      >
-                        <Icon className="w-3 h-3" />
-                        {label}
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      {c.contact ? (
-                        <button
-                          onClick={() => openWhatsApp(c, type)}
-                          disabled={isCompleted}
-                          className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${isCompleted
-                            ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
-                            : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:scale-[1.02]"
-                            }`}
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                          WhatsApp
-                        </button>
-                      ) : (
-                        <div className="flex-1 text-xs text-slate-600 text-center italic p-2 bg-slate-900 rounded border border-slate-800">
-                          Sin contacto
                         </div>
-                      )}
-                      <button
-                        onClick={() => toggleCompleteTask(c.id)}
-                        className={`px-3 py-2 rounded-lg border transition-all ${isCompleted
-                          ? "bg-blue-600/20 text-blue-400 border-blue-600/50 hover:bg-blue-600/30"
-                          : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
-                          }`}
-                        title={
-                          isCompleted
-                            ? "Desmarcar"
-                            : "Marcar como listo (para borrar después)"
-                        }
-                      >
-                        {isCompleted ? (
-                          <CheckSquare className="w-4 h-4" />
-                        ) : (
-                          <Square className="w-4 h-4" />
-                        )}
-                      </button>
+                      </div>
+                      <div className="space-y-2">
+                        {userPlatforms.map((plat) => (
+                          <div
+                            key={plat.id}
+                            className="flex items-center justify-between bg-slate-800 p-3 rounded-lg border border-slate-700 group hover:border-slate-600"
+                          >
+                            {editingPlatform?.id === plat.id ? (
+                              <div className="flex gap-2 w-full items-center">
+                                <input
+                                  type="text"
+                                  className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs uppercase"
+                                  value={editingPlatform.name}
+                                  onChange={(e) =>
+                                    setEditingPlatform({
+                                      ...editingPlatform,
+                                      name: e.target.value,
+                                    })
+                                  }
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="URL"
+                                  className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs"
+                                  value={editingPlatform.url || ""}
+                                  onChange={(e) =>
+                                    setEditingPlatform({
+                                      ...editingPlatform,
+                                      url: e.target.value,
+                                    })
+                                  }
+                                />
+                                <select
+                                  className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs"
+                                  value={editingPlatform.color}
+                                  onChange={(e) =>
+                                    setEditingPlatform({
+                                      ...editingPlatform,
+                                      color: e.target.value,
+                                    })
+                                  }
+                                >
+                                  {AVAILABLE_COLORS.map((c) => (
+                                    <option key={c.class} value={c.class}>
+                                      {c.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={saveEditedPlatform}
+                                  className="text-emerald-400 p-1"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={cancelEditingPlatform}
+                                  className="text-rose-400 p-1"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={`w-4 h-4 rounded-full ${plat.color}`}
+                                  ></div>
+                                  <span className="font-bold text-white text-sm">
+                                    {plat.name}
+                                  </span>
+                                </div>
+                                <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => startEditingPlatform(plat)}
+                                    className="text-slate-500 hover:text-blue-400 p-1"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeletePlatform(plat.id)}
+                                    className="text-slate-500 hover:text-rose-400 p-1"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  ) : settingsTab === "messages" ? (
+                    <div className="space-y-5">
+                      {/* Messages settings content remains same */}
+                      <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                        <div className="mb-2">
+                          <label className="text-sm font-bold text-yellow-400">
+                            Vence Mañana (1 día)
+                          </label>
+                        </div>
+                        <VariableToolbar
+                          onInsert={(v) =>
+                            insertIntoTemplate("reminderTomorrow", v)
+                          }
+                        />
+                        <textarea
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-yellow-500 outline-none min-h-[80px]"
+                          value={userTemplates.reminderTomorrow}
+                          onChange={(e) =>
+                            handleUpdateTemplate("reminderTomorrow", e.target.value)
+                          }
+                        />
+                      </div>
+                      {/* ... other message blocks ... */}
+                      <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                        <div className="mb-2">
+                          <label className="text-sm font-bold text-blue-400 flex gap-2">
+                            <HelpCircle className="w-4 h-4" /> Seguimiento (Faltan
+                            15 días)
+                          </label>
+                        </div>
+                        <VariableToolbar
+                          onInsert={(v) => insertIntoTemplate("checkIn15Days", v)}
+                        />
+                        <textarea
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-blue-500 outline-none min-h-[80px]"
+                          value={userTemplates.checkIn15Days}
+                          onChange={(e) =>
+                            handleUpdateTemplate("checkIn15Days", e.target.value)
+                          }
+                        />
+                      </div>
+
+                      <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                        <div className="mb-2">
+                          <label className="text-sm font-bold text-purple-400 flex gap-2">
+                            <HeartHandshake className="w-4 h-4" /> Recuperación
+                            (Hace 15 días)
+                          </label>
+                        </div>
+                        <VariableToolbar
+                          onInsert={(v) => insertIntoTemplate("recoveryLost", v)}
+                        />
+                        <textarea
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-purple-500 outline-none min-h-[80px]"
+                          value={userTemplates.recoveryLost}
+                          onChange={(e) =>
+                            handleUpdateTemplate("recoveryLost", e.target.value)
+                          }
+                        />
+                      </div>
+
+                      <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+                        <div className="mb-2">
+                          <label className="text-sm font-bold text-rose-400">
+                            Vencido
+                          </label>
+                        </div>
+                        <VariableToolbar
+                          onInsert={(v) => insertIntoTemplate("expired", v)}
+                        />
+                        <textarea
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:border-rose-500 outline-none min-h-[80px]"
+                          value={userTemplates.expired}
+                          onChange={(e) =>
+                            handleUpdateTemplate("expired", e.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {/* TAB NOTIFICACIONES */}
+                      {/* ... same notification content ... */}
+                      <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
+                        <div>
+                          <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                            <HelpCircle className="w-4 h-4 text-blue-400" />{" "}
+                            Seguimiento Preventivo
+                          </h4>
+                          <p className="text-slate-400 text-xs mt-1">
+                            Avisar 15 días antes del vencimiento.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() =>
+                            toggleNotificationPreference("checkIn15Days")
+                          }
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${userNotificationPrefs.checkIn15Days
+                            ? "bg-blue-600"
+                            : "bg-slate-700"
+                            }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${userNotificationPrefs.checkIn15Days
+                              ? "translate-x-6"
+                              : "translate-x-1"
+                              }`}
+                          />
+                        </button>
+                      </div>
+
+                      <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
+                        <div>
+                          <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-yellow-400" />{" "}
+                            Alerta de Urgencia
+                          </h4>
+                          <p className="text-slate-400 text-xs mt-1">
+                            Avisar desde 1 día antes y mantener si vence.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() =>
+                            toggleNotificationPreference("reminderTomorrow")
+                          }
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${userNotificationPrefs.reminderTomorrow
+                            ? "bg-blue-600"
+                            : "bg-slate-700"
+                            }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${userNotificationPrefs.reminderTomorrow
+                              ? "translate-x-6"
+                              : "translate-x-1"
+                              }`}
+                          />
+                        </button>
+                      </div>
+
+                      <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
+                        <div>
+                          <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                            <HeartHandshake className="w-4 h-4 text-purple-400" />{" "}
+                            Recuperación
+                          </h4>
+                          <p className="text-slate-400 text-xs mt-1">
+                            Intentar recuperar al cliente 15 días después.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() =>
+                            toggleNotificationPreference("recovery15Days")
+                          }
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${userNotificationPrefs.recovery15Days
+                            ? "bg-blue-600"
+                            : "bg-slate-700"
+                            }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${userNotificationPrefs.recovery15Days
+                              ? "translate-x-6"
+                              : "translate-x-1"
+                              }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )
+        }
 
-      {/* Nuevo/Editar Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 p-6 overflow-y-auto max-h-[90vh]">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-white">
-                {editingClient ? "Editar Cliente" : "Nuevo Cliente"}
-              </h3>
-              <button onClick={closeModal}>
-                <X className="w-6 h-6 text-slate-500" />
-              </button>
-            </div>
-            <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    PLATAFORMA
-                  </label>
-                  <select
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
-                    value={formData.platform}
-                    onChange={(e) =>
-                      setFormData({ ...formData, platform: e.target.value })
-                    }
-                  >
-                    {userPlatforms.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    USUARIO
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
-                    value={formData.username}
-                    onChange={(e) =>
-                      setFormData({ ...formData, username: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">
-                  ID (Opcional) --
-                </label>
+        {/* Renovación */}
+        {
+          renewingClient && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 p-6">
+                <h3 className="text-white font-bold mb-4">
+                  Renovar a {renewingClient.name}
+                </h3>
                 <input
-                  type="text"
-                  className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
-                  value={formData.customId || ""}
+                  type="date"
+                  className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white mb-4 [color-scheme:dark]"
+                  value={renewalData.newExpiryDate}
                   onChange={(e) =>
-                    setFormData({ ...formData, customId: e.target.value })
+                    setRenewalData({
+                      ...renewalData,
+                      newExpiryDate: e.target.value,
+                    })
                   }
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">
-                  CONTRASEÑA DE SERVICIO (Opcional)
-                </label>
-                <input
-                  type="text"
-                  className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
-                  placeholder="Contraseña de la cuenta IPTV"
-                  value={formData.password || ""}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">
-                  NOMBRE CLIENTE
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    CONTACTO (WhatsApp)
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
-                    value={formData.contact}
-                    onChange={(e) =>
-                      setFormData({ ...formData, contact: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    CONEXIONES
+                <div className="mb-4">
+                  <label className="block text-xs text-slate-400 mb-1 uppercase font-bold">
+                    Monto Pagado ($)
                   </label>
                   <input
                     type="number"
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
-                    value={formData.connections}
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white font-bold text-lg"
+                    placeholder="0.00"
+                    value={renewalData.paymentAmount}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        connections: parseInt(e.target.value),
+                      setRenewalData({
+                        ...renewalData,
+                        paymentAmount: e.target.value,
                       })
                     }
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    INICIO
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white [color-scheme:dark]"
-                    value={formData.startDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, startDate: e.target.value })
-                    }
-                  />
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  <button
+                    onClick={() => applyRenewalPreset(1)}
+                    className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700 text-sm"
+                  >
+                    +1 Mes
+                  </button>
+                  <button
+                    onClick={() => applyRenewalPreset(3)}
+                    className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700 text-sm"
+                  >
+                    +3 Meses
+                  </button>
+                  <button
+                    onClick={() => applyRenewalPreset(6)}
+                    className="bg-slate-800 text-white p-2 rounded hover:bg-slate-700 text-sm"
+                  >
+                    +6 Meses
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-xs text-blue-400 mb-1">
-                    EXPIRACIÓN
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white font-bold [color-scheme:dark]"
-                    value={formData.expiryDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, expiryDate: e.target.value })
-                    }
-                  />
+                <div className="flex gap-2">
+                  <button
+                    onClick={confirmRenewal}
+                    className="flex-1 bg-emerald-600 text-white p-3 rounded font-bold"
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    onClick={() => setRenewingClient(null)}
+                    className="flex-1 bg-slate-700 text-white p-3 rounded"
+                  >
+                    Cancelar
+                  </button>
                 </div>
               </div>
+            </div>
+          )
+        }
 
-              <div>
-                <label className="block text-xs text-emerald-400 mb-1 font-bold">
-                  MONTO PAGADO ($) {editingClient ? "- AGREGAR AL TOTAL" : ""}
-                </label>
-                <input
-                  type="number"
-                  className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white font-bold"
-                  placeholder="0.00"
-                  value={formData.paymentAmount}
-                  onChange={(e) =>
-                    setFormData({ ...formData, paymentAmount: e.target.value })
-                  }
-                />
+        {/* Detalles */}
+        {
+          viewDetailsClient && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
+              <div className="bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-700 overflow-hidden animate-in slide-in-from-bottom duration-200 h-[90vh] sm:h-auto sm:max-h-[90vh] flex flex-col">
+                {/* Header */}
+                <div className="p-4 md:p-6 border-b border-slate-800 bg-slate-900 flex justify-between items-center shrink-0">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div
+                      className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg ${userPlatforms.find(
+                        (p) => p.id === viewDetailsClient.platform
+                      )?.color || "bg-slate-700"
+                        }`}
+                    >
+                      <Monitor className="w-6 h-6 md:w-8 md:h-8 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg md:text-2xl font-bold text-white tracking-tight">
+                        {viewDetailsClient.name}
+                      </h2>
+                      <div className="flex items-center gap-2 text-slate-400 text-xs md:text-sm">
+                        <span className="uppercase font-bold tracking-wider">
+                          {viewDetailsClient.platform}
+                        </span>
+                        <span className="w-1 h-1 bg-slate-500 rounded-full"></span>
+                        <span className="font-mono">
+                          {viewDetailsClient.customId || "SIN ID"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={closeDetailsModal}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white p-2 rounded-xl transition-colors"
+                  >
+                    <X className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
+                </div>
+
+                {/* Body Grid - Scrollable */}
+                <div className="p-4 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 overflow-y-auto">
+                  {/* Columna 1: Accesos */}
+                  <div className="space-y-3 md:space-y-4">
+                    <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                      <Lock className="w-4 h-4" /> Credenciales
+                    </h3>
+                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
+                      <div>
+                        <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                          Usuario
+                        </label>
+                        <div className="flex items-center gap-2 text-white font-mono text-base md:text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                          <User className="w-4 h-4 text-slate-500" />
+                          <span className="truncate">
+                            {viewDetailsClient.username}
+                          </span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                          Contraseña
+                        </label>
+                        <div className="flex items-center gap-2 text-white font-mono text-base md:text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50 justify-between">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <Lock className="w-4 h-4 text-slate-500" />
+                            <span className="truncate">
+                              {showClientPassword
+                                ? viewDetailsClient.password || "N/A"
+                                : "••••••••"}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() =>
+                              setShowClientPassword(!showClientPassword)
+                            }
+                            className="text-slate-400 hover:text-white p-1"
+                          >
+                            {showClientPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Columna 2: Fechas y Estado */}
+                  <div className="space-y-3 md:space-y-4">
+                    <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                      <Activity className="w-4 h-4" /> Estado del Servicio
+                    </h3>
+                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                            Inicio
+                          </label>
+                          <p className="text-white font-medium">
+                            {formatDate(viewDetailsClient.startDate)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                            Renovaciones
+                          </label>
+                          <span className="inline-flex items-center justify-center bg-blue-900/30 text-blue-400 px-2 py-1 rounded text-xs font-bold border border-blue-500/20">
+                            {viewDetailsClient.renewals}{" "}
+                            <RefreshCw className="w-3 h-3 ml-1" />
+                          </span>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-slate-700/50">
+                        <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                          Expiración
+                        </label>
+                        <p
+                          className={`text-xl md:text-2xl font-bold ${getDaysRemaining(viewDetailsClient.expiryDate) < 0
+                            ? "text-rose-500"
+                            : "text-emerald-400"
+                            }`}
+                        >
+                          {formatDate(viewDetailsClient.expiryDate)}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {getDaysRemaining(viewDetailsClient.expiryDate) < 0
+                            ? "Servicio Vencido"
+                            : `${getDaysRemaining(
+                              viewDetailsClient.expiryDate
+                            )} días restantes`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Columna 3: Contacto y Conexión */}
+                  <div className="space-y-3 md:space-y-4">
+                    <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                      <Phone className="w-4 h-4" /> Contacto y Uso
+                    </h3>
+                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 space-y-4">
+                      <div
+                        onClick={() => openWhatsApp(viewDetailsClient)}
+                        className="cursor-pointer group"
+                      >
+                        <label className="text-slate-500 text-xs font-bold uppercase block mb-1 group-hover:text-emerald-400 transition-colors">
+                          WhatsApp
+                        </label>
+                        <div className="flex items-center gap-2 text-white text-base md:text-lg bg-slate-900/50 p-2 rounded border border-slate-700/50 group-hover:border-emerald-500/50 transition-colors">
+                          <MessageCircle className="w-5 h-5 text-emerald-500" />
+                          <span>{viewDetailsClient.contact || "Sin número"}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-slate-500 text-xs font-bold uppercase block mb-1">
+                          Dispositivos
+                        </label>
+                        <div className="flex items-center gap-2 text-white text-base md:text-lg">
+                          <Wifi className="w-5 h-5 text-blue-500" />
+                          <span>
+                            {viewDetailsClient.connections} Pantalla
+                            {viewDetailsClient.connections !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Actions - Sticky Bottom */}
+                <div className="p-4 md:p-6 bg-slate-900 border-t border-slate-800 flex gap-4 shrink-0">
+                  <button
+                    onClick={() => {
+                      closeDetailsModal();
+                      handleOpenRenewalModal(viewDetailsClient);
+                    }}
+                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm md:text-base"
+                  >
+                    <RefreshCw className="w-5 h-5" /> Renovar
+                  </button>
+                  <button
+                    onClick={() => {
+                      closeDetailsModal();
+                      openModal(viewDetailsClient);
+                    }}
+                    className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold border border-slate-700 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm md:text-base"
+                  >
+                    <Edit2 className="w-5 h-5" /> Editar
+                  </button>
+                </div>
               </div>
+            </div>
+          )
+        }
 
-              <button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg mt-4"
-              >
-                Guardar
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
+        {/* Notificaciones */}
+        {
+          showNotifications && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-700 overflow-hidden h-[80vh] flex flex-col">
+                <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900 shrink-0 gap-3">
+                  <div className="flex-1">
+                    <h3 className="text-white font-bold flex items-center gap-2">
+                      <Bell className="w-5 h-5" /> Notificaciones
+                    </h3>
+                  </div>
+
+                  {/* Nuevo Botón de Borrar Completados */}
+                  {completedTasks.length > 0 && (
+                    <button
+                      onClick={handleClearCompleted}
+                      className="text-xs bg-slate-800 hover:bg-rose-900/40 text-rose-400 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-rose-500/30 transition-all flex items-center gap-1.5"
+                    >
+                      <Trash className="w-3.5 h-3.5" />
+                      Borrar ({completedTasks.length})
+                    </button>
+                  )}
+
+                  <button onClick={() => setShowNotifications(false)}>
+                    <X className="w-5 h-5 text-slate-500 hover:text-white" />
+                  </button>
+                </div>
+
+                <div className="p-4 overflow-y-auto space-y-2 flex-1">
+                  {pendingNotifications.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
+                      <CheckCircle className="w-12 h-12 opacity-20" />
+                      <p>¡Todo al día!</p>
+                      <p className="text-xs text-slate-600 text-center px-4">
+                        No tienes alertas pendientes. Las tareas completadas se han
+                        limpiado.
+                      </p>
+                    </div>
+                  )}
+                  {pendingNotifications.map((c) => {
+                    const days = getDaysRemaining(c.expiryDate);
+
+                    // Determinar tipo de alerta dinámico
+                    let type = "default"; // CORREGIDO: Default para que use la lógica automática de openWhatsApp
+                    let label = "";
+                    let style = "";
+                    let Icon = AlertCircle;
+
+                    if (days === 15) {
+                      type = "checkIn15Days";
+                      label = "Seguimiento";
+                      style = "bg-blue-500/10 text-blue-400 border-blue-500/20";
+                      Icon = HelpCircle;
+                    } else if (days === -15) {
+                      type = "recoveryLost";
+                      label = "Recuperación";
+                      style =
+                        "bg-purple-500/10 text-purple-400 border-purple-500/20";
+                      Icon = HeartHandshake;
+                    } else if (days === 1) {
+                      type = "reminderTomorrow"; // Solo explícito si falta 1 día
+                      label = "Vence Mañana";
+                      style =
+                        "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
+                      Icon = AlertCircle;
+                    } else if (days === 0) {
+                      type = "default"; // Dejar que openWhatsApp detecte <= 5 días
+                      label = "Vence HOY";
+                      style =
+                        "bg-orange-500/10 text-orange-400 border-orange-500/20 animate-pulse";
+                      Icon = AlertCircle;
+                    } else if (days < 0) {
+                      type = "default"; // Dejar que openWhatsApp detecte < 0 días (expired)
+                      label = "VENCIDO";
+                      style =
+                        "bg-rose-500/10 text-rose-400 border-rose-500/20 font-bold";
+                      Icon = AlertTriangle;
+                    }
+
+                    const isCompleted = completedTasks.includes(c.id);
+
+                    return (
+                      <div
+                        key={c.id}
+                        className={`p-4 transition-all duration-300 rounded border border-slate-700 ${isCompleted
+                          ? "bg-slate-900/30 opacity-50 scale-[0.98]"
+                          : "bg-slate-800"
+                          }`}
+                      >
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <p
+                              className={`font-bold text-sm ${isCompleted
+                                ? "text-slate-500 line-through"
+                                : "text-white"
+                                }`}
+                            >
+                              {c.name}
+                            </p>
+                            <p className="text-slate-400 text-xs mt-0.5">
+                              {c.platform} • {c.contact}
+                            </p>
+                          </div>
+                          <div
+                            className={`text-[10px] font-bold px-2 py-1 rounded uppercase border flex items-center gap-1.5 ${style}`}
+                          >
+                            <Icon className="w-3 h-3" />
+                            {label}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          {c.contact ? (
+                            <button
+                              onClick={() => openWhatsApp(c, type)}
+                              disabled={isCompleted}
+                              className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${isCompleted
+                                ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
+                                : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:scale-[1.02]"
+                                }`}
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                              WhatsApp
+                            </button>
+                          ) : (
+                            <div className="flex-1 text-xs text-slate-600 text-center italic p-2 bg-slate-900 rounded border border-slate-800">
+                              Sin contacto
+                            </div>
+                          )}
+                          <button
+                            onClick={() => toggleCompleteTask(c.id)}
+                            className={`px-3 py-2 rounded-lg border transition-all ${isCompleted
+                              ? "bg-blue-600/20 text-blue-400 border-blue-600/50 hover:bg-blue-600/30"
+                              : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
+                              }`}
+                            title={
+                              isCompleted
+                                ? "Desmarcar"
+                                : "Marcar como listo (para borrar después)"
+                            }
+                          >
+                            {isCompleted ? (
+                              <CheckSquare className="w-4 h-4" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )
+        }
+
+        {/* Nuevo/Editar Modal */}
+        {
+          showModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-700 p-6 overflow-y-auto max-h-[90vh]">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-white">
+                    {editingClient ? "Editar Cliente" : "Nuevo Cliente"}
+                  </h3>
+                  <button onClick={closeModal}>
+                    <X className="w-6 h-6 text-slate-500" />
+                  </button>
+                </div>
+                <form onSubmit={handleSave} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        PLATAFORMA
+                      </label>
+                      <select
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                        value={formData.platform}
+                        onChange={(e) =>
+                          setFormData({ ...formData, platform: e.target.value })
+                        }
+                      >
+                        {userPlatforms.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        USUARIO
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                        value={formData.username}
+                        onChange={(e) =>
+                          setFormData({ ...formData, username: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      ID (Opcional) --
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                      value={formData.customId || ""}
+                      onChange={(e) =>
+                        setFormData({ ...formData, customId: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      CONTRASEÑA DE SERVICIO (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                      placeholder="Contraseña de la cuenta IPTV"
+                      value={formData.password || ""}
+                      onChange={(e) =>
+                        setFormData({ ...formData, password: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      NOMBRE CLIENTE
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        CONTACTO (WhatsApp)
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                        value={formData.contact}
+                        onChange={(e) =>
+                          setFormData({ ...formData, contact: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        CONEXIONES
+                      </label>
+                      <input
+                        type="number"
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                        value={formData.connections}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            connections: parseInt(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        INICIO
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white [color-scheme:dark]"
+                        value={formData.startDate}
+                        onChange={(e) =>
+                          setFormData({ ...formData, startDate: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-blue-400 mb-1">
+                        EXPIRACIÓN
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white font-bold [color-scheme:dark]"
+                        value={formData.expiryDate}
+                        onChange={(e) =>
+                          setFormData({ ...formData, expiryDate: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-emerald-400 mb-1 font-bold">
+                      MONTO PAGADO ($) {editingClient ? "- AGREGAR AL TOTAL" : ""}
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white font-bold"
+                      placeholder="0.00"
+                      value={formData.paymentAmount}
+                      onChange={(e) =>
+                        setFormData({ ...formData, paymentAmount: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg mt-4"
+                  >
+                    Guardar
+                  </button>
+                </form>
+              </div>
+            </div>
+          )
+        }
+      </div >
+    </div >
   );
 }
 
@@ -2970,4 +3353,4 @@ function StatsCard({ title, value, icon, color, active, onClick }) {
       </div>
     </div>
   );
-}
+};
